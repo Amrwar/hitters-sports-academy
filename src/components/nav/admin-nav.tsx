@@ -27,6 +27,8 @@ import { IconButton } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Badge } from "@/components/ui/badge";
+import { useAdminActor } from "./admin-actor";
+import { logoutAction } from "@/server/actions/auth";
 
 const groups: { label: string; items: { href: string; label: string; icon: typeof Users; badge?: string }[] }[] = [
   {
@@ -48,6 +50,7 @@ const groups: { label: string; items: { href: string; label: string; icon: typeo
     label: "People",
     items: [
       { href: "/admin/members", label: "Members", icon: Users },
+      { href: "/admin/staff", label: "Staff", icon: UserSquare2 },
       { href: "/admin/trainers", label: "Trainers", icon: UserSquare2 },
       { href: "/admin/programs", label: "Programs", icon: GraduationCap },
     ],
@@ -92,6 +95,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function SidebarChrome({ onClose }: { onClose?: () => void }) {
+  const me = useAdminActor();
   return (
     <div data-theme="dark" className="flex h-full flex-col bg-navy-gradient text-white">
       <div className="flex h-16 items-center justify-between border-b border-white/10 px-5">
@@ -112,14 +116,16 @@ function SidebarChrome({ onClose }: { onClose?: () => void }) {
           <Settings size={18} className="text-blue-300/80" /> Settings
         </Link>
         <div className="mt-2 flex items-center gap-3 rounded-md bg-white/5 p-2.5">
-          <Avatar name="Amr Hefny" size="sm" />
+          <Avatar name={me.name} size="sm" />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-body-sm font-bold">Amr Hefny</div>
-            <div className="truncate text-caption text-blue-200/70">Super admin</div>
+            <div className="truncate text-body-sm font-bold">{me.name}</div>
+            <div className="truncate text-caption text-blue-200/70">{me.roleLabel}</div>
           </div>
-          <IconButton variant="ghost" size="sm" label="Sign out" href="/login">
-            <LogOut />
-          </IconButton>
+          <form action={logoutAction}>
+            <IconButton type="submit" variant="ghost" size="sm" label="Sign out">
+              <LogOut />
+            </IconButton>
+          </form>
         </div>
       </div>
     </div>
@@ -129,6 +135,7 @@ function SidebarChrome({ onClose }: { onClose?: () => void }) {
 /** Desktop-first admin shell: fixed dark sidebar, light content area, drawer on small screens. */
 export function AdminShell({ children, title, breadcrumb, actions }: { children: ReactNode; title: string; breadcrumb?: string[]; actions?: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const me = useAdminActor();
   return (
     <div data-theme="light" className="min-h-dvh bg-canvas text-fg">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 lg:block">
@@ -171,14 +178,14 @@ export function AdminShell({ children, title, breadcrumb, actions }: { children:
             <Dropdown
               trigger={
                 <button type="button" className="rounded-full" aria-label="Account menu">
-                  <Avatar name="Amr Hefny" size="sm" />
+                  <Avatar name={me.name} size="sm" />
                 </button>
               }
-              label="Signed in as Amr"
+              label={`Signed in as ${me.name.split(" ")[0]}`}
               items={[
-                { label: "Profile", icon: <UserSquare2 /> },
-                { label: "Settings", icon: <Settings /> },
-                { label: "Sign out", icon: <LogOut />, tone: "danger" },
+                { label: "Player app", icon: <UserSquare2 />, onSelect: () => (window.location.href = "/app") },
+                { label: "Settings", icon: <Settings />, onSelect: () => (window.location.href = "/admin/settings") },
+                { label: "Sign out", icon: <LogOut />, tone: "danger", onSelect: () => void logoutAction() },
               ]}
             />
           </div>

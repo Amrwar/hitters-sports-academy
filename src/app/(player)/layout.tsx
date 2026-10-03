@@ -1,14 +1,22 @@
 import { BottomNav, PlayerTopBar } from "@/components/nav/player-nav";
-import { currentUser, notifications } from "@/data/mock";
+import { requireActorOrRedirect } from "@/lib/auth/cookies";
+import { db } from "@/lib/db";
+import { VerifyBanner } from "./verify-banner";
 
-/** Mobile-first player shell. On larger screens the app stays a centred 480px column on the court backdrop. */
-export default function PlayerLayout({ children }: { children: React.ReactNode }) {
-  const unread = notifications.filter((n) => !n.read).length;
+export const dynamic = "force-dynamic";
+
+/** Mobile-first player shell. Requires a signed-in, active account. */
+export default async function PlayerLayout({ children }: { children: React.ReactNode }) {
+  const actor = await requireActorOrRedirect("/app");
+  const unread = await db.notification.count({ where: { userId: actor.id, channel: "IN_APP", readAt: null } });
   return (
     <div className="min-h-dvh bg-court">
       <div className="relative mx-auto min-h-dvh max-w-app bg-canvas sm:border-x sm:border-line/10">
-        <PlayerTopBar unread={unread} userName={currentUser.name} />
-        <main className="px-4 pb-32 pt-5 animate-fade-in">{children}</main>
+        <PlayerTopBar unread={unread} userName={actor.name} />
+        <main className="px-4 pb-32 pt-5 animate-fade-in">
+          {!actor.emailVerifiedAt && <VerifyBanner email={actor.email} />}
+          {children}
+        </main>
         <BottomNav />
       </div>
     </div>

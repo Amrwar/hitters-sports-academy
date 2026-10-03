@@ -1,30 +1,55 @@
 import { ArrowRight, CalendarPlus, GraduationCap, MapPin, Navigation, Swords, Trophy, UserSquare2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, SectionHeader } from "@/components/ui/card";
-import { LevelBadge } from "@/components/ui/badge";
+import { Badge, LevelBadge } from "@/components/ui/badge";
 import { StatTile } from "@/components/ui/misc";
 import { BookingCard, MatchCard, ProgramCard, QuickAction } from "@/components/patterns/cards";
-import { bookings, currentUser, locationBySlug, matches, programs } from "@/data/mock";
+import { bookings, locationBySlug, matches, programs } from "@/data/mock";
+import { requireActorOrRedirect } from "@/lib/auth/cookies";
+import { getMyProfile } from "@/server/services/profiles";
 
-export default function PlayerDashboard() {
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+}
+
+export default async function PlayerDashboard() {
+  const actor = await requireActorOrRedirect("/app");
+  const profile = await getMyProfile(actor);
+  // Bookings, sessions and programs are still mock data until those phases ship.
   const next = bookings.find((b) => b.status === "confirmed");
   const nextLoc = next && locationBySlug(next.locationSlug);
   const live = matches.find((m) => m.status === "live");
   const open = matches.filter((m) => m.status === "open").slice(0, 2);
-  const winRate = Math.round((currentUser.wins / currentUser.matches) * 100);
 
   return (
     <div className="space-y-7">
-      {/* Greeting */}
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-overline uppercase text-blue-300">Good evening</div>
-          <h1 className="text-h1">{currentUser.name.split(" ")[0]}</h1>
+          <div className="text-overline uppercase text-blue-300">{greeting()}</div>
+          <h1 className="text-h1">{actor.name.split(" ")[0]}</h1>
         </div>
-        <LevelBadge level={currentUser.level} size="lg" withLabel />
+        {profile.level ? (
+          <LevelBadge level={profile.level} size="lg" withLabel />
+        ) : (
+          <Button size="sm" variant="outline" href="/app/trainers">
+            Book assessment
+          </Button>
+        )}
       </div>
 
-      {/* Next booking hero */}
+      {!profile.level && (
+        <Card variant="brand" padding="md" className="court-line">
+          <div className="relative flex items-center gap-4">
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-md bg-white/15 text-h3 font-extrabold">?</span>
+            <div className="min-w-0 flex-1">
+              <div className="text-h4">Get your level</div>
+              <div className="text-body-sm text-white/80">A free 30-minute assessment places you at A, B, C or D so matchmaking fits your game.</div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {next && nextLoc && (
         <Card variant="brand" padding="lg" className="court-line">
           <div className="relative">
@@ -49,7 +74,6 @@ export default function PlayerDashboard() {
         </Card>
       )}
 
-      {/* Quick actions */}
       <div className="grid grid-cols-2 gap-3">
         <QuickAction href="/app/book" icon={<CalendarPlus />} label="Book a court" hint="From EGP 400/h" />
         <QuickAction href="/app/play" icon={<Swords />} label="Find a match" hint="3 open near you" />
@@ -57,7 +81,6 @@ export default function PlayerDashboard() {
         <QuickAction href="/app/programs" icon={<GraduationCap />} label="Programs" hint="New intake Oct" />
       </div>
 
-      {/* Live */}
       {live && (
         <section>
           <SectionHeader eyebrow="Happening now" title="Live at your club" />
@@ -65,7 +88,6 @@ export default function PlayerDashboard() {
         </section>
       )}
 
-      {/* Open matches */}
       <section>
         <SectionHeader
           eyebrow="Matchmaking"
@@ -83,17 +105,15 @@ export default function PlayerDashboard() {
         </div>
       </section>
 
-      {/* Progress */}
       <section>
         <SectionHeader eyebrow="Your season" title="Progress" />
         <div className="grid grid-cols-3 gap-3">
-          <StatTile label="Matches" value={currentUser.matches} />
-          <StatTile label="Win rate" value={`${winRate}%`} delta={{ value: "+4% this month" }} />
-          <StatTile label="Rating" value={currentUser.rating.toFixed(1)} icon={<Trophy />} tone="brand" />
+          <StatTile label="Level" value={profile.level ?? "—"} />
+          <StatTile label="Assessments" value={profile.assessments.length} />
+          <StatTile label="Home club" value={<span className="text-h4">{profile.homeLocation?.name.replace("HITTERS ", "") ?? "Not set"}</span>} icon={<Trophy />} tone="brand" />
         </div>
       </section>
 
-      {/* Upcoming bookings */}
       <section>
         <SectionHeader
           eyebrow="Bookings"
@@ -111,12 +131,12 @@ export default function PlayerDashboard() {
               <BookingCard key={b.id} booking={b} />
             ))}
         </div>
+        <Badge className="mt-2">Sample data until booking launches</Badge>
       </section>
 
-      {/* Programs */}
       <section>
-        <SectionHeader eyebrow="Academy" title="Recommended for Level B" />
-        <ProgramCard program={programs[1]} />
+        <SectionHeader eyebrow="Academy" title={`Recommended${profile.level ? ` for Level ${profile.level}` : ""}`} />
+        <ProgramCard program={programs[profile.level === "A" ? 2 : profile.level === "B" ? 1 : 0]} />
       </section>
     </div>
   );

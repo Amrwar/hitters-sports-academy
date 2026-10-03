@@ -9,10 +9,6 @@ import { ProgressBar } from "@/components/ui/misc";
 import { TrainerCard } from "@/components/patterns/cards";
 import { byId, locationBySlug, money, programs, trainers } from "@/data/mock";
 
-export function generateStaticParams() {
-  return programs.map((p) => ({ id: p.id }));
-}
-
 export default async function ProgramPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const p = byId(programs, id);

@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: hitters-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hitters
+      POSTGRES_PASSWORD: hitters_dev
+      POSTGRES_DB: hitters
+    ports:
+      - "5440:5432"
+    volumes:
+      - hitters_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hitters -d hitters"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  hitters_pgdata:

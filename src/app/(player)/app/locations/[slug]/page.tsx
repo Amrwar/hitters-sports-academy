@@ -7,10 +7,6 @@ import { Badge, StatusBadge } from "@/components/ui/badge";
 import { CourtBackdrop, MatchCard, TrainerCard } from "@/components/patterns/cards";
 import { courts, locationBySlug, locations, matches, money, trainers } from "@/data/mock";
 
-export function generateStaticParams() {
-  return locations.map((l) => ({ slug: l.slug }));
-}
-
 export default async function LocationPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const loc = locationBySlug(slug);

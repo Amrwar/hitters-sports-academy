@@ -10,10 +10,6 @@ import { EmptyState } from "@/components/ui/states";
 import { MatchCard } from "@/components/patterns/cards";
 import { byId, locationBySlug, matches, players } from "@/data/mock";
 
-export function generateStaticParams() {
-  return players.map((p) => ({ id: p.id }));
-}
-
 export default async function PlayerProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const p = byId(players, id);

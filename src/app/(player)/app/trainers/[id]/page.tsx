@@ -9,10 +9,6 @@ import { byId, locationBySlug, money, programs, trainers } from "@/data/mock";
 import { ProgramCard } from "@/components/patterns/cards";
 import { BookSessionPanel } from "./book-session";
 
-export function generateStaticParams() {
-  return trainers.map((t) => ({ id: t.id }));
-}
-
 export default async function TrainerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const t = byId(trainers, id);

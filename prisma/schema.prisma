@@ -1,0 +1,370 @@
+// HITTERS Sports Academy - core data model (phase: foundation, auth, authorization).
+// Booking, matchmaking, programs and payments are added in later phases.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------- Enums
+
+/// Roles that apply across every location. Everything else is granted per location via StaffMembership.
+enum GlobalRole {
+  SUPER_ADMIN
+  ACADEMY_OWNER
+}
+
+/// Roles scoped to a single location.
+enum StaffRole {
+  LOCATION_MANAGER
+  RECEPTIONIST
+  TRAINER
+  ASSESSOR
+  FINANCE_MANAGER
+}
+
+/// Union of all roles, used by the permission matrix.
+enum Role {
+  SUPER_ADMIN
+  ACADEMY_OWNER
+  LOCATION_MANAGER
+  RECEPTIONIST
+  TRAINER
+  ASSESSOR
+  FINANCE_MANAGER
+  PLAYER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PlayerLevel {
+  A
+  B
+  C
+  D
+}
+
+enum PlayerSide {
+  LEFT
+  RIGHT
+  BOTH
+}
+
+enum ProfileVisibility {
+  PUBLIC
+  MEMBERS
+  PRIVATE
+}
+
+enum LocationStatus {
+  ACTIVE
+  INACTIVE
+  COMING_SOON
+}
+
+enum CourtType {
+  INDOOR
+  OUTDOOR
+  PANORAMIC
+}
+
+enum CourtStatus {
+  ACTIVE
+  MAINTENANCE
+  INACTIVE
+}
+
+enum TokenType {
+  EMAIL_VERIFY
+  PHONE_VERIFY
+  PASSWORD_RESET
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  PUSH
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+// ---------------------------------------------------------------- Identity
+
+/// One account per person across all HITTERS locations.
+model User {
+  id              String      @id @default(cuid())
+  email           String      @unique
+  phone           String?     @unique
+  passwordHash    String
+  name            String
+  globalRole      GlobalRole?
+  status          UserStatus  @default(ACTIVE)
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  playerProfile      PlayerProfile?
+  sessions           Session[]
+  verificationTokens VerificationToken[]
+  memberships        StaffMembership[]   @relation("MembershipUser")
+  createdMemberships StaffMembership[]   @relation("MembershipCreatedBy")
+  assessmentsGiven   Assessment[]        @relation("AssessmentAssessor")
+  notifications      Notification[]
+  auditLogs          AuditLog[]
+
+  @@index([status])
+  @@index([globalRole])
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  ip         String?
+  userAgent  String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model VerificationToken {
+  id         String    @id @default(cuid())
+  userId     String
+  type       TokenType
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
+}
+
+/// Role -> permission grants. Seeded from src/lib/auth/permissions.ts and authoritative at runtime.
+model RolePermission {
+  id         String @id @default(cuid())
+  role       Role
+  permission String
+
+  @@unique([role, permission])
+  @@index([role])
+}
+
+// ---------------------------------------------------------------- Players
+
+model PlayerProfile {
+  id             String            @id @default(cuid())
+  userId         String            @unique
+  level          PlayerLevel?
+  levelUpdatedAt DateTime?
+  side           PlayerSide        @default(RIGHT)
+  bio            String?           @db.VarChar(500)
+  dateOfBirth    DateTime?         @db.Date
+  homeLocationId String?
+  visibility     ProfileVisibility @default(MEMBERS)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  homeLocation Location?    @relation(fields: [homeLocationId], references: [id], onDelete: SetNull)
+  assessments  Assessment[]
+
+  @@index([level])
+  @@index([homeLocationId])
+}
+
+/// A/B/C/D placement performed by an assessor at a location. The latest assessment sets PlayerProfile.level.
+model Assessment {
+  id              String       @id @default(cuid())
+  playerProfileId String
+  assessorId      String
+  locationId      String
+  level           PlayerLevel
+  previousLevel   PlayerLevel?
+  notes           String?      @db.VarChar(2000)
+  scores          Json?
+  assessedAt      DateTime     @default(now())
+  createdAt       DateTime     @default(now())
+
+  playerProfile PlayerProfile @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
+  assessor      User          @relation("AssessmentAssessor", fields: [assessorId], references: [id], onDelete: Restrict)
+  location      Location      @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  @@index([playerProfileId, assessedAt(sort: Desc)])
+  @@index([locationId, assessedAt(sort: Desc)])
+  @@index([assessorId])
+}
+
+// ---------------------------------------------------------------- Locations
+
+model Location {
+  id           String         @id @default(cuid())
+  slug         String         @unique
+  name         String
+  city         String
+  area         String
+  address      String
+  timezone     String         @default("Africa/Cairo")
+  phone        String?
+  email        String?
+  status       LocationStatus @default(ACTIVE)
+  openingHours Json?
+  latitude     Float?
+  longitude    Float?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  courts       Court[]
+  memberships  StaffMembership[]
+  assessments  Assessment[]
+  homePlayers  PlayerProfile[]
+  auditLogs    AuditLog[]
+
+  @@index([status])
+  @@index([city])
+}
+
+model Court {
+  id         String      @id @default(cuid())
+  locationId String
+  name       String
+  type       CourtType
+  status     CourtStatus @default(ACTIVE)
+  sortOrder  Int         @default(0)
+  surface    String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  location     Location            @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  availability CourtAvailability[]
+  closures     CourtClosure[]
+
+  @@unique([locationId, name])
+  @@index([locationId, status])
+}
+
+/// Weekly opening template for a court. Times are minutes from midnight in the location timezone.
+model CourtAvailability {
+  id             String   @id @default(cuid())
+  courtId        String
+  dayOfWeek      Int // 0 = Sunday ... 6 = Saturday
+  opensAt        Int
+  closesAt       Int
+  slotMinutes    Int      @default(60)
+  priceCents     Int
+  peakStartsAt   Int?
+  peakEndsAt     Int?
+  peakPriceCents Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  court Court @relation(fields: [courtId], references: [id], onDelete: Cascade)
+
+  @@unique([courtId, dayOfWeek, opensAt])
+  @@index([courtId, dayOfWeek])
+}
+
+/// Maintenance or event window during which a court cannot be booked.
+model CourtClosure {
+  id        String   @id @default(cuid())
+  courtId   String
+  startsAt  DateTime
+  endsAt    DateTime
+  reason    String?  @db.VarChar(500)
+  createdAt DateTime @default(now())
+
+  court Court @relation(fields: [courtId], references: [id], onDelete: Cascade)
+
+  @@index([courtId, startsAt])
+}
+
+// ---------------------------------------------------------------- Staff
+
+/// Grants a location-scoped role to a user. A user may hold several roles at several locations.
+model StaffMembership {
+  id          String           @id @default(cuid())
+  userId      String
+  locationId  String
+  role        StaffRole
+  status      MembershipStatus @default(ACTIVE)
+  createdById String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  user      User     @relation("MembershipUser", fields: [userId], references: [id], onDelete: Cascade)
+  location  Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  createdBy User?    @relation("MembershipCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, locationId, role])
+  @@index([locationId, role, status])
+  @@index([userId, status])
+}
+
+// ---------------------------------------------------------------- Messaging & audit
+
+/// Outbox-style notification. IN_APP rows are read by the app; other channels are delivered by workers.
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  data      Json?
+  channel   NotificationChannel @default(IN_APP)
+  status    NotificationStatus  @default(SENT)
+  readAt    DateTime?
+  sentAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt(sort: Desc)])
+  @@index([status, channel, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  locationId String?
+  metadata   Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  actor    User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  location Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt(sort: Desc)])
+  @@index([locationId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+}

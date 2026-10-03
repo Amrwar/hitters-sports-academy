@@ -86,7 +86,7 @@ type IconButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const iconSizes = { sm: "size-9 rounded-sm [&_svg]:size-4", md: "size-11 [&_svg]:size-5", lg: "size-12 [&_svg]:size-6" };
 
-export function IconButton({ variant = "secondary", size = "md", label, href, className, children, ...rest }: IconButtonProps) {
+export function IconButton({ variant = "secondary", size = "md", label, href, className, children, type, ...rest }: IconButtonProps) {
   const classes = cn(base, buttonVariants[variant], iconSizes[size], "p-0", className);
   if (href) {
     return (
@@ -96,7 +96,7 @@ export function IconButton({ variant = "secondary", size = "md", label, href, cl
     );
   }
   return (
-    <button type="button" className={classes} aria-label={label} title={label} {...rest}>
+    <button type={type ?? "button"} className={classes} aria-label={label} title={label} {...rest}>
       {children}
     </button>
   );
