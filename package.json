@@ -15,8 +15,9 @@
     "db:reset": "prisma migrate reset --force",
     "test": "vitest run",
     "test:watch": "vitest",
-    "vercel-build": "prisma generate && prisma migrate deploy && next build",
-    "postinstall": "prisma generate"
+    "vercel-build": "node scripts/vercel-build.mjs",
+    "postinstall": "prisma generate",
+    "db:sync": "tsx scripts/sync-production.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
