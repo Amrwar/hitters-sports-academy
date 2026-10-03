@@ -93,6 +93,14 @@ enum TokenType {
   PASSWORD_RESET
 }
 
+enum PricingRuleKind {
+  PEAK
+  OFF_PEAK
+  WEEKEND
+  MEMBERSHIP_DISCOUNT
+  CUSTOM
+}
+
 enum NotificationChannel {
   IN_APP
   EMAIL
@@ -235,55 +243,127 @@ model Location {
   phone        String?
   email        String?
   status       LocationStatus @default(ACTIVE)
+  description  String?        @db.VarChar(2000)
+  /// Keys from the facilities catalogue (src/lib/catalog.ts).
+  facilities   String[]       @default([])
+  /// Seven entries, Sunday first: { opensAt, closesAt } in minutes or null when closed.
   openingHours Json?
   latitude     Float?
   longitude    Float?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
-  courts       Court[]
-  memberships  StaffMembership[]
-  assessments  Assessment[]
-  homePlayers  PlayerProfile[]
-  auditLogs    AuditLog[]
+  courts        Court[]
+  photos        LocationPhoto[]
+  bookingPolicy BookingPolicy?
+  pricingRules  PricingRule[]
+  memberships   StaffMembership[]
+  assessments   Assessment[]
+  homePlayers   PlayerProfile[]
+  auditLogs     AuditLog[]
 
   @@index([status])
   @@index([city])
 }
 
-model Court {
-  id         String      @id @default(cuid())
+/// Photos are URLs (brand library or an external/object-storage URL). Upload pipeline comes with the storage provider.
+model LocationPhoto {
+  id         String   @id @default(cuid())
   locationId String
-  name       String
-  type       CourtType
-  status     CourtStatus @default(ACTIVE)
-  sortOrder  Int         @default(0)
-  surface    String?
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  url        String
+  alt        String?  @db.VarChar(200)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([locationId, sortOrder])
+}
+
+/// Per-location booking rules consumed by the availability engine and, later, the booking service.
+model BookingPolicy {
+  id                         String   @id @default(cuid())
+  locationId                 String   @unique
+  advanceBookingDays         Int      @default(14)
+  minNoticeMinutes           Int      @default(60)
+  cancellationCutoffHours    Int      @default(12)
+  maxActiveBookingsPerPlayer Int      @default(3)
+  requireVerifiedEmail       Boolean  @default(true)
+  /// Durations (minutes) a player may book, unless a court overrides them.
+  allowedDurations           Int[]    @default([60, 90, 120])
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+}
+
+/// Price modifiers layered over the base hourly rate from CourtAvailability.
+/// courtId null = every court at the location. Applied in ascending priority order.
+model PricingRule {
+  id                String          @id @default(cuid())
+  locationId        String
+  courtId           String?
+  name              String
+  kind              PricingRuleKind
+  /// Empty = every day. 0 = Sunday ... 6 = Saturday.
+  daysOfWeek        Int[]           @default([])
+  startsAt          Int?
+  endsAt            Int?
+  /// Absolute hourly price that replaces the base when set.
+  priceCents        Int?
+  /// Percentage adjustment applied to the running price (e.g. 25 or -15).
+  adjustmentPercent Int?
+  /// For MEMBERSHIP_DISCOUNT: tier key the player must hold; null = any member.
+  membershipTier    String?
+  priority          Int             @default(100)
+  active            Boolean         @default(true)
+  validFrom         DateTime?
+  validTo           DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  court    Court?   @relation(fields: [courtId], references: [id], onDelete: Cascade)
+
+  @@index([locationId, active, priority])
+  @@index([courtId])
+}
+
+model Court {
+  id               String      @id @default(cuid())
+  locationId       String
+  name             String
+  type             CourtType
+  status           CourtStatus @default(ACTIVE)
+  sortOrder        Int         @default(0)
+  surface          String?
+  description      String?     @db.VarChar(500)
+  /// Overrides BookingPolicy.allowedDurations when non-empty.
+  durationsMinutes Int[]       @default([])
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
   location     Location            @relation(fields: [locationId], references: [id], onDelete: Cascade)
   availability CourtAvailability[]
   closures     CourtClosure[]
+  pricingRules PricingRule[]
 
   @@unique([locationId, name])
   @@index([locationId, status])
 }
 
-/// Weekly opening template for a court. Times are minutes from midnight in the location timezone.
+/// Weekly operating template for a court. Times are minutes from midnight in the location timezone.
+/// priceCents is the base hourly rate; PricingRule layers peak/weekend/membership adjustments on top.
 model CourtAvailability {
-  id             String   @id @default(cuid())
-  courtId        String
-  dayOfWeek      Int // 0 = Sunday ... 6 = Saturday
-  opensAt        Int
-  closesAt       Int
-  slotMinutes    Int      @default(60)
-  priceCents     Int
-  peakStartsAt   Int?
-  peakEndsAt     Int?
-  peakPriceCents Int?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id          String   @id @default(cuid())
+  courtId     String
+  dayOfWeek   Int // 0 = Sunday ... 6 = Saturday
+  opensAt     Int
+  closesAt    Int
+  slotMinutes Int      @default(60)
+  priceCents  Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   court Court @relation(fields: [courtId], references: [id], onDelete: Cascade)
 

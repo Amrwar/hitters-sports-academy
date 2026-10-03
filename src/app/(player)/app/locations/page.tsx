@@ -1,26 +1,33 @@
-import { Search, SlidersHorizontal } from "lucide-react";
+import Link from "next/link";
+import { MapPin } from "lucide-react";
 import { PageHeader } from "@/components/nav/player-nav";
-import { Input } from "@/components/ui/input";
-import { IconButton } from "@/components/ui/button";
-import { LocationCard } from "@/components/patterns/cards";
-import { locations } from "@/data/mock";
+import { EmptyState } from "@/components/ui/states";
+import { LiveLocationCard } from "@/components/patterns/live-location-card";
+import { requireActorOrRedirect } from "@/lib/auth/cookies";
+import { listPublicLocations } from "@/server/services/locations";
 
-export default function LocationsPage() {
-  const sorted = [...locations].sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
+export default async function LocationsPage() {
+  await requireActorOrRedirect("/app/locations");
+  const locations = await listPublicLocations();
   return (
     <div>
       <PageHeader eyebrow="Clubs" title="Locations" />
-      <div className="flex gap-2">
-        <Input placeholder="Search by area or club" leading={<Search />} aria-label="Search locations" />
-        <IconButton label="Filters" variant="secondary">
-          <SlidersHorizontal />
-        </IconButton>
-      </div>
-      <div className="mt-5 space-y-4">
-        {sorted.map((l) => (
-          <LocationCard key={l.slug} location={l} />
-        ))}
-      </div>
+      {locations.length === 0 ? (
+        <EmptyState icon={<MapPin />} title="No clubs open yet" description="New HITTERS locations will appear here." />
+      ) : (
+        <div className="space-y-4">
+          {locations.map((l) => (
+            <LiveLocationCard key={l.id} location={l} />
+          ))}
+        </div>
+      )}
+      <p className="mt-6 text-center text-caption text-fg-subtle">
+        Can&apos;t find your club?{" "}
+        <Link href="/app/profile" className="text-blue-300 underline-offset-2 hover:underline">
+          Set a home club
+        </Link>{" "}
+        in your profile.
+      </p>
     </div>
   );
 }

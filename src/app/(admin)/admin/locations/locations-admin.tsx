@@ -13,12 +13,12 @@ import { Modal } from "@/components/ui/modal";
 import { EmptyState } from "@/components/ui/states";
 import { useToast } from "@/components/ui/toast";
 import { CourtBackdrop } from "@/components/patterns/cards";
-import type { LocationView } from "@/server/services/locations";
+import type { LocationCard } from "@/server/services/locations";
 import { createLocationAction } from "@/server/actions/admin";
 
 const PHOTOS = ["/brand/court-net.jpg", "/brand/court-rackets.jpg", "/brand/court-line.jpg", "/brand/court-handles.jpg"];
 
-export function LocationsAdmin({ locations, canCreate }: { locations: LocationView[]; canCreate: boolean }) {
+export function LocationsAdmin({ locations, canCreate }: { locations: LocationCard[]; canCreate: boolean }) {
   const router = useRouter();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -48,8 +48,8 @@ export function LocationsAdmin({ locations, canCreate }: { locations: LocationVi
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {locations.map((l, i) => (
-            <Card key={l.id} padding="none" variant="interactive" href={`/admin/courts?location=${l.id}`}>
-              <CourtBackdrop src={PHOTOS[i % PHOTOS.length]} overlay="soft" className="h-36">
+            <Card key={l.id} padding="none" variant="interactive" href={`/admin/locations/${l.id}`}>
+              <CourtBackdrop src={l.photos[0]?.url ?? PHOTOS[i % PHOTOS.length]} overlay="soft" className="h-36">
                 <div className="flex h-36 flex-col justify-end p-4 text-white">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
@@ -64,10 +64,10 @@ export function LocationsAdmin({ locations, canCreate }: { locations: LocationVi
               </CourtBackdrop>
               <dl className="grid grid-cols-4 divide-x divide-line/10 text-center">
                 {[
-                  ["Courts", `${l._count.courts}`],
+                  ["Courts", `${l.activeCourts}/${l._count.courts}`],
                   ["Staff", `${l._count.memberships}`],
-                  ["Home players", `${l._count.homePlayers}`],
-                  ["Timezone", l.timezone.split("/")[1] ?? l.timezone],
+                  ["From", l.priceFromCents != null ? `EGP ${Math.round(l.priceFromCents / 100)}` : "—"],
+                  ["Today", l.openToday ? `${String(Math.floor(l.openToday.opensAt / 60)).padStart(2, "0")}:${String(l.openToday.opensAt % 60).padStart(2, "0")}–${l.openToday.closesAt === 1440 ? "24:00" : `${String(Math.floor(l.openToday.closesAt / 60)).padStart(2, "0")}:${String(l.openToday.closesAt % 60).padStart(2, "0")}`}` : "Closed"],
                 ].map(([k, v]) => (
                   <div key={k} className="p-3">
                     <dt className="text-[10px] font-bold uppercase tracking-wider text-fg-subtle">{k}</dt>
@@ -113,7 +113,7 @@ export function LocationsAdmin({ locations, canCreate }: { locations: LocationVi
           </div>
         </form>
       </Modal>
-      <Badge className="mt-6">Occupancy and revenue appear once booking launches</Badge>
+      <Badge className="mt-6">Open a location to edit details, photos, hours, facilities, policy and pricing</Badge>
     </AdminShell>
   );
 }

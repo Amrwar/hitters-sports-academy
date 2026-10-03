@@ -7,6 +7,7 @@ import {
   BarChart3,
   Bell,
   CalendarDays,
+  CalendarRange,
   ChevronRight,
   GraduationCap,
   LayoutDashboard,
@@ -42,6 +43,7 @@ const groups: { label: string; items: { href: string; label: string; icon: typeo
     label: "Operations",
     items: [
       { href: "/admin/bookings", label: "Bookings", icon: CalendarDays, badge: "12" },
+      { href: "/admin/calendar", label: "Calendar", icon: CalendarRange },
       { href: "/admin/courts", label: "Courts", icon: LayoutGrid },
       { href: "/admin/locations", label: "Locations", icon: MapPin },
     ],

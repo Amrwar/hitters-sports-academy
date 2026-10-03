@@ -91,6 +91,7 @@ describe("locations", () => {
     expect(updated.name).toBe("Alpha Renamed");
     await expectCode(locations.updateLocation(w.managerA.actor, w.B.id, { name: "Hacked" }), "FORBIDDEN");
     await expectCode(locations.updateLocation(w.managerA.actor, w.A.id, { status: "INACTIVE" }), "FORBIDDEN");
+    await expectCode(locations.updateLocation(w.managerA.actor, w.A.id, { status: "COMING_SOON" }), "FORBIDDEN");
     await expectCode(locations.updateLocation(w.receptionA.actor, w.A.id, { name: "Nope" }), "FORBIDDEN");
     await expectCode(locations.updateLocation(w.playerA.actor, w.A.id, { name: "Nope" }), "FORBIDDEN");
     const off = await locations.updateLocation(w.owner.actor, w.A.id, { status: "INACTIVE" });
@@ -136,13 +137,12 @@ describe("courts and availability", () => {
 
   it("validates availability windows", async () => {
     const good = [
-      { dayOfWeek: 1, opensAt: 420, closesAt: 1440, slotMinutes: 60, priceCents: 45000, peakStartsAt: 1080, peakEndsAt: 1260, peakPriceCents: 56000 },
+      { dayOfWeek: 1, opensAt: 420, closesAt: 1440, slotMinutes: 60, priceCents: 45000 },
       { dayOfWeek: 2, opensAt: 420, closesAt: 1440, slotMinutes: 90, priceCents: 45000 },
     ];
     const court = await courts.setCourtAvailability(w.managerA.actor, w.courtA.id, good);
     expect(court.availability).toHaveLength(2);
     await expectCode(courts.setCourtAvailability(w.managerA.actor, w.courtA.id, [{ dayOfWeek: 1, opensAt: 600, closesAt: 500, priceCents: 1 }]), "VALIDATION");
-    await expectCode(courts.setCourtAvailability(w.managerA.actor, w.courtA.id, [{ dayOfWeek: 1, opensAt: 420, closesAt: 720, priceCents: 1, peakStartsAt: 400, peakEndsAt: 500, peakPriceCents: 2 }]), "VALIDATION");
     await expectCode(courts.setCourtAvailability(w.managerA.actor, w.courtA.id, [{ dayOfWeek: 1, opensAt: 420, closesAt: 720, priceCents: 1 }, { dayOfWeek: 1, opensAt: 700, closesAt: 900, priceCents: 1 }]), "VALIDATION");
     await expectCode(courts.setCourtAvailability(w.managerA.actor, w.courtB.id, good), "FORBIDDEN");
     await expectCode(courts.setCourtAvailability(w.receptionA.actor, w.courtA.id, good), "FORBIDDEN");

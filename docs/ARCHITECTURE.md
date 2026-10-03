@@ -28,6 +28,14 @@ docs/             AUDIT, DESIGN_SYSTEM, ARCHITECTURE
 
 Constraints: unique email/phone, unique (location, court name), unique (user, location, role), unique (court, day, opensAt), unique token hashes; FKs cascade from User/Location/Court and restrict on assessor/location of assessments.
 
+## Locations, courts, availability and pricing (phase 4)
+- `Location` gained `description`, `facilities[]` (keys from `src/lib/catalog.ts`), `openingHours` (JSON, 7 entries Sunday-first, null = closed), `LocationPhoto[]` (URL based until object storage is connected) and a 1-1 `BookingPolicy` (booking window, minimum notice, cancellation cutoff, max active bookings, verified-email requirement, allowed durations).
+- `Court` gained `description` and `durationsMinutes[]` (overrides the policy's allowed durations). `CourtAvailability` is the weekly operating template with a **base hourly rate**; the old peak columns were migrated into `PricingRule` rows (see migration `20261003030000_court_management`).
+- `PricingRule` (kinds PEAK, OFF_PEAK, WEEKEND, MEMBERSHIP_DISCOUNT, CUSTOM) scopes by location or court, days, time window, validity dates and membership tier; applied in ascending priority, absolute price replaces the base, percentage scales the running total. Engine: `quotePrice()` in `server/services/pricing.ts` (pure, unit tested).
+- `CourtClosure` blocks a period. Overlaps are rejected inside a transaction that locks the court row (`SELECT ... FOR UPDATE`); `closeLocationCourts` blocks every court atomically.
+- Availability engine `computeCourtDay()` (`server/services/availability.ts`, pure) intersects the court template with location hours, applies closures, court/location status and booking policy, and prices each slot. All wall-clock math uses `src/lib/time.ts` (Intl-based, no dependency) in the location's IANA timezone; UTC instants are what get stored.
+- Admin UI: `/admin/locations/[id]` (details, photos, hours, facilities, policy, pricing), `/admin/courts/[id]` (details, weekly template, closures), `/admin/calendar` (courts x hours grid with block-period actions). Player UI: `/app/locations` and `/app/locations/[slug]` read live data.
+
 ## Authentication
 - Passwords: scrypt (N=2^15, r=8, p=1, 64-byte key), parameters stored with the hash; rehash on login when parameters are raised.
 - Sessions: 32-byte random cookie token, SHA-256 stored; `hitters_session` cookie is httpOnly, SameSite=Lax, Secure in production. Expiry slides hourly. Logout deletes the row; password reset/change and suspension revoke all sessions.

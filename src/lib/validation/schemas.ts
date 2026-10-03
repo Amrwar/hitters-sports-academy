@@ -85,19 +85,9 @@ export const availabilitySchema = z
     closesAt: minutes,
     slotMinutes: z.coerce.number().int().refine((v) => [30, 60, 90, 120].includes(v), "Slot must be 30, 60, 90 or 120 minutes.").default(60),
     priceCents: z.coerce.number().int().min(0).max(10_000_000),
-    peakStartsAt: minutes.optional(),
-    peakEndsAt: minutes.optional(),
-    peakPriceCents: z.coerce.number().int().min(0).max(10_000_000).optional(),
   })
   .refine((v) => v.closesAt > v.opensAt, { message: "Closing time must be after opening time.", path: ["closesAt"] })
-  .refine((v) => (v.peakStartsAt === undefined) === (v.peakEndsAt === undefined) && (v.peakStartsAt === undefined) === (v.peakPriceCents === undefined), {
-    message: "Peak start, end and price must be set together.",
-    path: ["peakStartsAt"],
-  })
-  .refine((v) => v.peakStartsAt === undefined || (v.peakEndsAt! > v.peakStartsAt && v.peakStartsAt >= v.opensAt && v.peakEndsAt! <= v.closesAt), {
-    message: "Peak window must sit inside opening hours.",
-    path: ["peakEndsAt"],
-  });
+  .refine((v) => (v.closesAt - v.opensAt) % v.slotMinutes === 0 || v.closesAt - v.opensAt >= v.slotMinutes, { message: "Window is shorter than one slot.", path: ["closesAt"] });
 
 export const closureSchema = z
   .object({
@@ -135,3 +125,95 @@ export function fieldErrors(e: z.ZodError): Record<string, string> {
   }
   return out;
 }
+
+/* ------------------------------------------------------------------ Location management (phase: courts) */
+
+import { FACILITY_KEYS } from "@/lib/catalog";
+import { isValidTimeZone } from "@/lib/time";
+
+const minutesOfDay = z.coerce.number().int().min(0).max(24 * 60);
+
+/** Seven entries, Sunday first; null = closed that day. */
+export const openingHoursSchema = z
+  .array(z.object({ opensAt: minutesOfDay, closesAt: minutesOfDay }).nullable())
+  .length(7, "Provide all seven days.")
+  .refine((days) => days.every((d) => !d || d.closesAt > d.opensAt), "Closing time must be after opening time.");
+
+export type OpeningHours = z.infer<typeof openingHoursSchema>;
+
+export const locationDetailsSchema = z.object({
+  slug: slug.optional(),
+  name: z.string().trim().min(2).max(80).optional(),
+  city: z.string().trim().min(2).max(60).optional(),
+  area: z.string().trim().min(2).max(80).optional(),
+  address: z.string().trim().min(5).max(200).optional(),
+  description: z.string().trim().max(2000).optional().or(z.literal("").transform(() => null)),
+  timezone: z.string().trim().refine(isValidTimeZone, "Unknown timezone.").optional(),
+  phone: z.string().trim().max(30).optional().or(z.literal("").transform(() => null)),
+  email: email.optional().or(z.literal("").transform(() => null)),
+  status: z.enum(["ACTIVE", "INACTIVE", "COMING_SOON"]).optional(),
+  latitude: z.coerce.number().min(-90).max(90).nullable().optional(),
+  longitude: z.coerce.number().min(-180).max(180).nullable().optional(),
+  facilities: z.array(z.enum(FACILITY_KEYS)).max(FACILITY_KEYS.length).optional(),
+  openingHours: openingHoursSchema.optional(),
+});
+
+export const photoSchema = z.object({
+  url: z
+    .string()
+    .trim()
+    .max(500)
+    .refine((u) => /^https?:\/\/[^\s]+$/i.test(u) || /^\/brand\/[a-z0-9_-]+\.(jpg|jpeg|png|webp)$/i.test(u), "Use an https URL or a brand library photo."),
+  alt: z.string().trim().max(200).optional(),
+});
+
+export const bookingPolicySchema = z.object({
+  advanceBookingDays: z.coerce.number().int().min(1).max(365),
+  minNoticeMinutes: z.coerce.number().int().min(0).max(24 * 60 * 7),
+  cancellationCutoffHours: z.coerce.number().int().min(0).max(24 * 30),
+  maxActiveBookingsPerPlayer: z.coerce.number().int().min(1).max(50),
+  requireVerifiedEmail: z.coerce.boolean(),
+  allowedDurations: z.array(z.coerce.number().int().refine((v) => [30, 60, 90, 120, 150, 180].includes(v), "Unsupported duration.")).min(1).max(6),
+});
+
+export const courtDetailsSchema = z.object({
+  name: z.string().trim().min(1).max(40).optional(),
+  type: z.enum(["INDOOR", "OUTDOOR", "PANORAMIC"]).optional(),
+  status: z.enum(["ACTIVE", "MAINTENANCE", "INACTIVE"]).optional(),
+  sortOrder: z.coerce.number().int().min(0).max(999).optional(),
+  surface: z.string().trim().max(40).optional().or(z.literal("").transform(() => null)),
+  description: z.string().trim().max(500).optional().or(z.literal("").transform(() => null)),
+  durationsMinutes: z.array(z.coerce.number().int().refine((v) => [30, 60, 90, 120, 150, 180].includes(v), "Unsupported duration.")).max(6).optional(),
+});
+
+export const pricingRuleSchema = z
+  .object({
+    courtId: z.string().cuid().nullable().optional(),
+    name: z.string().trim().min(2).max(60),
+    kind: z.enum(["PEAK", "OFF_PEAK", "WEEKEND", "MEMBERSHIP_DISCOUNT", "CUSTOM"]),
+    daysOfWeek: z.array(z.coerce.number().int().min(0).max(6)).max(7).default([]),
+    startsAt: minutesOfDay.nullable().optional(),
+    endsAt: minutesOfDay.nullable().optional(),
+    priceCents: z.coerce.number().int().min(0).max(10_000_000).nullable().optional(),
+    adjustmentPercent: z.coerce.number().int().min(-100).max(300).nullable().optional(),
+    membershipTier: z.string().trim().max(40).nullable().optional(),
+    priority: z.coerce.number().int().min(0).max(1000).default(100),
+    active: z.coerce.boolean().default(true),
+    validFrom: z.coerce.date().nullable().optional(),
+    validTo: z.coerce.date().nullable().optional(),
+  })
+  .refine((r) => (r.priceCents ?? null) !== null || (r.adjustmentPercent ?? null) !== null, { message: "Set a price or a percentage adjustment.", path: ["priceCents"] })
+  .refine((r) => (r.startsAt == null) === (r.endsAt == null), { message: "Set both start and end time, or neither.", path: ["endsAt"] })
+  .refine((r) => r.startsAt == null || r.endsAt! > r.startsAt, { message: "End time must be after start time.", path: ["endsAt"] })
+  .refine((r) => !r.validFrom || !r.validTo || r.validTo > r.validFrom, { message: "Valid-to must be after valid-from.", path: ["validTo"] });
+
+/** Closure input as wall-clock times in the location timezone (datetime-local values). */
+export const closureLocalSchema = z
+  .object({
+    startLocal: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/, "Enter a start time."),
+    endLocal: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/, "Enter an end time."),
+    reason: z.string().trim().max(500).optional().or(z.literal("").transform(() => undefined)),
+  })
+  .refine((v) => v.endLocal > v.startLocal, { message: "End must be after start.", path: ["endLocal"] });
+
+export const dateISOSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD.");

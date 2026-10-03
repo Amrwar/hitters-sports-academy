@@ -12,6 +12,21 @@ import { seedRolePermissions } from "../src/server/services/permissions-seed";
 const db = new PrismaClient();
 export const DEV_PASSWORD = "HittersDev!2026";
 
+const HOURS_ALL_WEEK = Array.from({ length: 7 }, () => ({ opensAt: 7 * 60, closesAt: 24 * 60 }));
+const DESCRIPTIONS: Record<string, string> = {
+  "new-cairo": "Our flagship club: eight courts including four panoramic glass courts, a pro shop, café and full coaching academy in the heart of the Fifth Settlement.",
+  "sheikh-zayed": "Six fully air-conditioned indoor courts, perfect for summer play, with physio and lounge facilities at Arkan Plaza.",
+  maadi: "Four outdoor courts under the Degla trees. Home of the HITTERS Junior Academy.",
+  "north-coast": "Seasonal beach-side club in Marassi with panoramic courts and a sunset lounge.",
+};
+const FACILITIES_BY_SLUG: Record<string, string[]> = {
+  "new-cairo": ["parking", "showers", "lockers", "cafe", "pro_shop", "coaching", "equipment_rental", "wifi"],
+  "sheikh-zayed": ["parking", "indoor_ac", "cafe", "lockers", "physio", "lounge", "wifi"],
+  maadi: ["parking", "cafe", "lockers", "kids_area", "coaching"],
+  "north-coast": ["parking", "lounge", "showers", "equipment_rental", "accessible"],
+};
+const PHOTOS = ["/brand/court-net.jpg", "/brand/court-rackets.jpg", "/brand/court-line.jpg", "/brand/court-handles.jpg"];
+
 const LOCATIONS = [
   { slug: "new-cairo", name: "HITTERS New Cairo", city: "Cairo", area: "Fifth Settlement", address: "90th St, Fifth Settlement, New Cairo", phone: "+20220000000", courts: [["Court 1", "PANORAMIC"], ["Court 2", "PANORAMIC"], ["Court 3", "INDOOR"], ["Court 4", "INDOOR"], ["Court 5", "OUTDOOR"], ["Court 6", "OUTDOOR"]], price: 45000 },
   { slug: "sheikh-zayed", name: "HITTERS Sheikh Zayed", city: "Giza", area: "Sheikh Zayed", address: "Arkan Plaza, Sheikh Zayed", phone: "+20238000000", courts: [["Court 1", "INDOOR"], ["Court 2", "INDOOR"], ["Court 3", "INDOOR"], ["Court 4", "INDOOR"], ["Court 5", "INDOOR"], ["Court 6", "INDOOR"]], price: 50000 },
@@ -46,22 +61,36 @@ async function main() {
   for (const l of LOCATIONS) {
     const loc = await db.location.upsert({
       where: { slug: l.slug },
-      create: { slug: l.slug, name: l.name, city: l.city, area: l.area, address: l.address, phone: l.phone, status: "ACTIVE" },
-      update: { name: l.name, city: l.city, area: l.area, address: l.address, phone: l.phone },
+      create: { slug: l.slug, name: l.name, city: l.city, area: l.area, address: l.address, phone: l.phone, status: "ACTIVE", description: DESCRIPTIONS[l.slug], facilities: FACILITIES_BY_SLUG[l.slug], openingHours: HOURS_ALL_WEEK, timezone: "Africa/Cairo" },
+      update: { name: l.name, city: l.city, area: l.area, address: l.address, phone: l.phone, description: DESCRIPTIONS[l.slug], facilities: FACILITIES_BY_SLUG[l.slug], openingHours: HOURS_ALL_WEEK },
     });
     locationIds.set(l.slug, loc.id);
+    await db.bookingPolicy.upsert({ where: { locationId: loc.id }, create: { locationId: loc.id, advanceBookingDays: 14, minNoticeMinutes: 60, cancellationCutoffHours: 12 }, update: {} });
+    if ((await db.locationPhoto.count({ where: { locationId: loc.id } })) === 0) {
+      const idx = LOCATIONS.findIndex((x) => x.slug === l.slug);
+      await db.locationPhoto.createMany({ data: [0, 1].map((k) => ({ locationId: loc.id, url: PHOTOS[(idx + k) % PHOTOS.length], alt: `${l.name} court`, sortOrder: k })) });
+    }
+    // Pricing rules (location-wide). Seed owns these rows: migrated per-court peak rows are replaced.
+    await db.pricingRule.deleteMany({ where: { locationId: loc.id, OR: [{ courtId: { not: null }, name: "Peak hours" }, { name: { in: ["Peak hours", "Weekend", "HITTER Pro members"] } }] } });
+    await db.pricingRule.createMany({
+      data: [
+        { locationId: loc.id, name: "Peak hours", kind: "PEAK", daysOfWeek: [], startsAt: 18 * 60, endsAt: 21 * 60, adjustmentPercent: 25, priority: 100 },
+        { locationId: loc.id, name: "Weekend", kind: "WEEKEND", daysOfWeek: [5, 6], adjustmentPercent: 10, priority: 110 },
+        { locationId: loc.id, name: "HITTER Pro members", kind: "MEMBERSHIP_DISCOUNT", membershipTier: "PRO", adjustmentPercent: -15, priority: 200 },
+      ],
+    });
     for (const [i, [name, type]] of l.courts.entries()) {
       const court = await db.court.upsert({
         where: { locationId_name: { locationId: loc.id, name } },
         create: { locationId: loc.id, name, type: type as CourtType, sortOrder: i, status: l.slug === "new-cairo" && name === "Court 4" ? "MAINTENANCE" : "ACTIVE" },
         update: { type: type as CourtType, sortOrder: i },
       });
-      // 07:00 - 24:00 every day, 60 min slots, peak 18:00-21:00 at +25%.
+      // 07:00 - 24:00 every day, 60 min slots. Peak/weekend/member pricing comes from PricingRule.
       for (let day = 0; day < 7; day++) {
         await db.courtAvailability.upsert({
           where: { courtId_dayOfWeek_opensAt: { courtId: court.id, dayOfWeek: day, opensAt: 7 * 60 } },
-          create: { courtId: court.id, dayOfWeek: day, opensAt: 7 * 60, closesAt: 24 * 60, slotMinutes: 60, priceCents: l.price, peakStartsAt: 18 * 60, peakEndsAt: 21 * 60, peakPriceCents: Math.round(l.price * 1.25) },
-          update: { closesAt: 24 * 60, priceCents: l.price, peakPriceCents: Math.round(l.price * 1.25) },
+          create: { courtId: court.id, dayOfWeek: day, opensAt: 7 * 60, closesAt: 24 * 60, slotMinutes: 60, priceCents: l.price },
+          update: { closesAt: 24 * 60, priceCents: l.price },
         });
       }
     }

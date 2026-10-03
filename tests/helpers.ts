@@ -11,7 +11,7 @@ export const PASSWORD = "Correct-horse-9";
 
 export async function resetDb() {
   await db.$executeRawUnsafe(
-    `TRUNCATE TABLE "AuditLog","Notification","Assessment","CourtClosure","CourtAvailability","Court","StaffMembership","PlayerProfile","VerificationToken","Session","RolePermission","Location","User" RESTART IDENTITY CASCADE`,
+    `TRUNCATE TABLE "AuditLog","Notification","Assessment","PricingRule","CourtClosure","CourtAvailability","Court","LocationPhoto","BookingPolicy","StaffMembership","PlayerProfile","VerificationToken","Session","RolePermission","Location","User" RESTART IDENTITY CASCADE`,
   );
   await seedRolePermissions(db);
   invalidatePermissionCache();
