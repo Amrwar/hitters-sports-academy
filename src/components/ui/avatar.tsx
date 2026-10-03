@@ -23,6 +23,8 @@ function initials(name: string) {
 type Props = {
   name: string;
   size?: Size;
+  /** Photo URL. Falls back to initials when absent; a broken image falls back too. */
+  src?: string | null;
   /** Online presence dot. */
   online?: boolean;
   /** Blue ring, used for the current user or a highlighted player. */
@@ -30,14 +32,22 @@ type Props = {
   className?: string;
 };
 
-/** Initials avatar; palette is derived from the name so it is stable across renders. */
-export function Avatar({ name, size = "md", online, ring, className }: Props) {
+/** Only http(s) URLs are painted, and quotes are dropped so a stored value cannot break out of the css url(). */
+function safePhoto(src: string | null | undefined): string | null {
+  if (!src) return null;
+  const clean = src.trim().replace(/["'()\\]/g, "");
+  return /^https?:\/\/\S+$/i.test(clean) ? clean : null;
+}
+
+/** Photo avatar when `src` is given, otherwise initials; the palette is derived from the name so it is stable across renders. */
+export function Avatar({ name, size = "md", src, online, ring, className }: Props) {
   const palette = palettes[name.length % palettes.length];
+  const photo = safePhoto(src);
   return (
     <span className={cn("relative inline-flex shrink-0", className)}>
       <span
         className={cn(
-          "inline-flex items-center justify-center rounded-full font-bold uppercase tracking-wide select-none",
+          "relative inline-flex items-center justify-center overflow-hidden rounded-full font-bold uppercase tracking-wide select-none",
           sizes[size],
           palette,
           ring && "ring-2 ring-blue-400 ring-offset-2 ring-offset-canvas shadow-glow-sm",
@@ -46,6 +56,11 @@ export function Avatar({ name, size = "md", online, ring, className }: Props) {
         role="img"
       >
         {initials(name)}
+        {photo && (
+          // A CSS layer over the initials: a missing or broken photo simply paints nothing and the initials
+          // show through. Using a background rather than <img> keeps this usable from server components.
+          <span aria-hidden className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url("${photo}")` }} />
+        )}
       </span>
       {online && <span className="absolute bottom-0 right-0 size-[22%] min-h-2 min-w-2 rounded-full bg-success ring-2 ring-canvas" aria-label="Online" />}
     </span>

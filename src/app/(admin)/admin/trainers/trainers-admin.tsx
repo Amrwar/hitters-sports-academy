@@ -41,6 +41,7 @@ export function TrainersAdmin({ trainers, candidates, locations, levels, canMana
     return {
       title: String(f.get("title") ?? ""),
       bio: String(f.get("bio") ?? ""),
+      photoUrl: String(f.get("photoUrl") ?? ""),
       hourlyRateCents: Math.round(Number(f.get("rate") || 0) * 100),
       durationsMinutes: String(f.get("durations") ?? "60").split(",").map((x) => Number(x.trim())).filter(Boolean),
       levels: levels.map((l) => l.level).filter((l) => f.get(`level-${l}`)),
@@ -85,6 +86,14 @@ export function TrainersAdmin({ trainers, candidates, locations, levels, canMana
         <Field label="Years of experience">{(id) => <Input id={id} name="years" type="number" min={0} max={60} defaultValue={t?.yearsExperience ?? ""} />}</Field>
       </div>
       <Field label="Biography">{(id) => <Textarea id={id} name="bio" maxLength={2000} defaultValue={t?.bio ?? ""} />}</Field>
+      <Field label="Photo URL" hint="An https image link. Leave empty to show the coach's initials.">
+        {(id) => (
+          <div className="flex items-center gap-3">
+            <Avatar name={t?.user.name ?? "Coach"} src={t?.photoUrl} size="md" />
+            <Input id={id} name="photoUrl" type="url" maxLength={500} defaultValue={t?.photoUrl ?? ""} placeholder="https://..." className="flex-1" />
+          </div>
+        )}
+      </Field>
       <Field label="Qualifications (comma separated)">{(id) => <Input id={id} name="qualifications" defaultValue={t?.qualifications.join(", ") ?? ""} placeholder="FIP Level 2, PTR Certified" />}</Field>
       <Field label="Clubs">
         {() => (
@@ -172,7 +181,7 @@ export function TrainersAdmin({ trainers, candidates, locations, levels, canMana
                 <TR key={t.id}>
                   <TD>
                     <div className="flex items-center gap-3">
-                      <Avatar name={t.user.name} size="sm" />
+                      <Avatar name={t.user.name} src={t.photoUrl} size="sm" />
                       <div>
                         <div className="font-semibold">{t.user.name}</div>
                         <div className="text-caption text-fg-subtle">{t.title}</div>

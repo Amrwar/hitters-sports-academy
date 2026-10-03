@@ -401,7 +401,13 @@ export const trainerProfileSchema = z.object({
   userId: z.string().cuid(),
   title: z.string().trim().min(2).max(80),
   bio: textOpt(2000),
-  photoUrl: textOpt(500),
+  photoUrl: z
+    .string()
+    .trim()
+    .max(500)
+    .refine((u) => u === "" || /^https?:\/\/[^\s]+$/i.test(u), "Use an https image URL.")
+    .transform((u) => (u === "" ? null : u))
+    .optional(),
   qualifications: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
   languages: z.array(z.string().trim().min(1).max(40)).max(10).default([]),
   specialties: z.array(z.string().trim().min(1).max(60)).max(15).default([]),

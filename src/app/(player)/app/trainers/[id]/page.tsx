@@ -37,7 +37,7 @@ export default async function TrainerPage({ params }: { params: Promise<{ id: st
     <div className="space-y-7">
       <PageHeader back="/app/trainers" title="Coach" eyebrow="Academy" />
       <div className="flex items-center gap-4">
-        <Avatar name={t.user.name} size="xl" ring />
+        <Avatar name={t.user.name} src={t.photoUrl} size="xl" ring />
         <div className="min-w-0">
           <h2 className="text-h2">{t.user.name}</h2>
           <div className="text-body-sm text-blue-300">{t.title}</div>

@@ -41,10 +41,13 @@ describe("trainer profiles and availability", () => {
     await expectCode(trainers.createTrainerProfile(w.receptionA.actor, { userId: w.coach2.user.id, title: "Coach", hourlyRateCents: 50000, locationIds: [w.A.id] }), "FORBIDDEN");
     const t2 = await trainers.createTrainerProfile(w.owner.actor, { userId: w.coach2.user.id, title: "Coach", hourlyRateCents: 50000, locationIds: [w.A.id] });
     expect(t2.status).toBe("ACTIVE");
-    // Trainer edits bio but cannot change the rate or clubs.
-    const mine = await trainers.updateTrainerProfile(w.coach.actor, w.trainer.id, { bio: "12 years on tour", hourlyRateCents: 1 });
+    // Trainer edits bio and photo but cannot change the rate or clubs.
+    const mine = await trainers.updateTrainerProfile(w.coach.actor, w.trainer.id, { bio: "12 years on tour", photoUrl: "https://cdn.example.com/ahmed.jpg", hourlyRateCents: 1 });
     expect(mine.bio).toBe("12 years on tour");
+    expect(mine.photoUrl).toBe("https://cdn.example.com/ahmed.jpg");
     expect(mine.hourlyRateCents).toBe(90000);
+    await expectCode(trainers.updateTrainerProfile(w.coach.actor, w.trainer.id, { photoUrl: "javascript:alert(1)" }), "VALIDATION");
+    expect((await trainers.updateTrainerProfile(w.coach.actor, w.trainer.id, { photoUrl: "" })).photoUrl).toBeNull(); // clearing works
     await expectCode(trainers.updateTrainerProfile(w.coach.actor, w.trainer.id, { locationIds: [w.A.id, w.B.id] }), "FORBIDDEN");
     await expectCode(trainers.updateTrainerProfile(w.coach2.actor, w.trainer.id, { bio: "hijack" }), "FORBIDDEN");
     const grown = await trainers.updateTrainerProfile(w.owner.actor, w.trainer.id, { locationIds: [w.A.id, w.B.id], hourlyRateCents: 100000 });

@@ -61,7 +61,7 @@ export function TrainerCard({ trainer, levelLabels, href }: { trainer: TrainerVi
   const body = (
     <Card variant={href ? "interactive" : "default"}>
       <div className="flex items-start gap-3.5">
-        <Avatar name={trainer.user.name} size="lg" ring />
+        <Avatar name={trainer.user.name} src={trainer.photoUrl} size="lg" ring />
         <div className="min-w-0 flex-1">
           <div className="truncate text-h4">{trainer.user.name}</div>
           <div className="text-caption text-blue-300">{trainer.title}</div>

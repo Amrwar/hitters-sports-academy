@@ -100,7 +100,7 @@ export function CoachingView({ viewerId, levelLabels, trainer, clubs, selectedCl
                 </TD>
                 <TD>
                   <div className="flex items-center gap-2">
-                    <Avatar name={l.player.name} size="xs" />
+                    <Avatar name={l.player.name} src={l.player.playerProfile?.photoUrl} size="xs" />
                     <span className="font-semibold">{l.player.name}</span>
                     {l.player.playerProfile?.level && <LevelBadge level={l.player.playerProfile.level as PlayerLevel} size="sm" label={levelLabels[l.player.playerProfile.level]} />}
                   </div>
@@ -239,7 +239,7 @@ export function CoachingView({ viewerId, levelLabels, trainer, clubs, selectedCl
                     <TR key={s.user.id}>
                       <TD>
                         <div className="flex items-center gap-2">
-                          <Avatar name={s.user.name} size="xs" /> <span className="font-semibold">{s.user.name}</span>
+                          <Avatar name={s.user.name} src={s.user.photoUrl} size="xs" /> <span className="font-semibold">{s.user.name}</span>
                         </div>
                       </TD>
                       <TD>{s.user.level ? <LevelBadge level={s.user.level as PlayerLevel} size="sm" label={levelLabels[s.user.level]} /> : "—"}</TD>

@@ -123,7 +123,7 @@ export function ProgramDetail({ program: p, enrollment, levels, myLevel }: { pro
         <SectionHeader title="Your coach" />
         <Card variant="interactive" padding="sm" href={`/app/trainers/${p.trainer.id}`}>
           <div className="flex items-center gap-3">
-            <Avatar name={p.trainer.user.name} size="md" ring />
+            <Avatar name={p.trainer.user.name} src={p.trainer.photoUrl} size="md" ring />
             <div className="min-w-0 flex-1">
               <div className="text-body font-bold">{p.trainer.user.name}</div>
               <div className="text-caption text-blue-300">{p.trainer.title}</div>
