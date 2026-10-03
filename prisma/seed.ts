@@ -11,7 +11,8 @@ import { seedRolePermissions } from "../src/server/services/permissions-seed";
 import { DEFAULT_LEVELS } from "../src/server/services/levels";
 
 const db = new PrismaClient();
-export const DEV_PASSWORD = "HittersDev!2026";
+/** Shared password for every seeded account. Override with SEED_PASSWORD when seeding anything reachable from the internet. */
+export const DEV_PASSWORD = process.env.SEED_PASSWORD?.trim() || "HittersDev!2026";
 
 const HOURS_ALL_WEEK = Array.from({ length: 7 }, () => ({ opensAt: 7 * 60, closesAt: 24 * 60 }));
 const DESCRIPTIONS: Record<string, string> = {
