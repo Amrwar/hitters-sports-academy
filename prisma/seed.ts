@@ -38,6 +38,12 @@ const LOCATIONS = [
 
 type SeedUser = { email: string; name: string; phone?: string; globalRole?: "SUPER_ADMIN" | "ACADEMY_OWNER"; staff?: [string, StaffRole][]; level?: PlayerLevel; home?: string; verified?: boolean };
 
+/**
+ * Deterministic placeholder portrait for demo accounts. pravatar serves the same face for the same seed, so
+ * screenshots stay stable. Real deployments set their own URLs; a dead link falls back to initials in Avatar.
+ */
+const demoPhoto = (seed: string) => `https://i.pravatar.cc/240?u=${encodeURIComponent(seed)}`;
+
 const USERS: SeedUser[] = [
   { email: "admin@hitters.academy", name: "HITTERS Admin", globalRole: "SUPER_ADMIN", verified: true },
   { email: "owner@hitters.academy", name: "Academy Owner", globalRole: "ACADEMY_OWNER", verified: true },
@@ -105,10 +111,12 @@ async function main() {
   for (const u of USERS) {
     const user = await db.user.upsert({
       where: { email: u.email },
-      create: { email: u.email, name: u.name, phone: u.phone, passwordHash, globalRole: u.globalRole ?? null, emailVerifiedAt: u.verified ? new Date() : null, playerProfile: { create: { homeLocationId: u.home ? locationIds.get(u.home) : undefined } } },
+      create: { email: u.email, name: u.name, phone: u.phone, passwordHash, globalRole: u.globalRole ?? null, emailVerifiedAt: u.verified ? new Date() : null, playerProfile: { create: { homeLocationId: u.home ? locationIds.get(u.home) : undefined, photoUrl: demoPhoto(u.email) } } },
       update: { name: u.name, globalRole: u.globalRole ?? null, passwordHash },
     });
     userIds.set(u.email, user.id);
+    // Applied outside the upsert so re-running the seed backfills photos onto accounts that already exist.
+    await db.playerProfile.updateMany({ where: { userId: user.id, photoUrl: null }, data: { photoUrl: demoPhoto(u.email) } });
     for (const [slug, role] of u.staff ?? []) {
       await db.staffMembership.upsert({
         where: { userId_locationId_role: { userId: user.id, locationId: locationIds.get(slug)!, role } },
@@ -217,7 +225,7 @@ async function main() {
   // Academy demo: coaching profiles, weekly availability, a lesson, two programs, packages and a purchase.
   const ensureTrainer = async (email: string, data: Omit<Prisma.TrainerProfileUncheckedCreateInput, "userId">, slugs: string[], hours: { dayOfWeek: number; startMinutes: number; endMinutes: number }[]) => {
     const userId = userIds.get(email)!;
-    const t = await db.trainerProfile.upsert({ where: { userId }, create: { userId, ...data }, update: {} });
+    const t = await db.trainerProfile.upsert({ where: { userId }, create: { userId, photoUrl: demoPhoto(email), ...data }, update: { photoUrl: demoPhoto(email) } });
     for (const slug of slugs) await db.trainerLocation.upsert({ where: { trainerId_locationId: { trainerId: t.id, locationId: locationIds.get(slug)! } }, create: { trainerId: t.id, locationId: locationIds.get(slug)! }, update: {} });
     if ((await db.trainerAvailability.count({ where: { trainerId: t.id } })) === 0) {
       await db.trainerAvailability.createMany({ data: hours.map((h) => ({ trainerId: t.id, locationId: locationIds.get(slugs[0])!, ...h })) });
