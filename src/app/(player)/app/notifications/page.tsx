@@ -20,7 +20,7 @@ function relative(date: Date) {
 }
 
 const kindOf = (type: string): UiNotification["kind"] =>
-  type.startsWith("assessment") ? "system" : type.startsWith("staff") ? "system" : type.startsWith("booking") ? "booking" : type.startsWith("match") ? "match" : type.startsWith("payment") ? "payment" : type.startsWith("program") ? "program" : "system";
+  type.startsWith("assessment") ? "system" : type.startsWith("staff") ? "system" : type.startsWith("booking") ? "booking" : type.startsWith("match") || type.startsWith("game") || type.startsWith("pair") ? "match" : type.startsWith("payment") ? "payment" : type.startsWith("program") ? "program" : "system";
 
 export default async function NotificationsPage() {
   const actor = await requireActorOrRedirect("/app/notifications");
@@ -32,7 +32,7 @@ export default async function NotificationsPage() {
     body: n.body,
     time: relative(n.createdAt),
     read: !!n.readAt,
-    href: n.type.startsWith("staff") ? "/admin" : "/app/profile",
+    href: n.type.startsWith("staff") ? "/admin" : n.type.startsWith("game") && (n.data as { code?: string } | null)?.code ? `/app/play/${(n.data as { code: string }).code}` : n.type.startsWith("pair") ? "/app/play/pairs" : n.type.startsWith("booking") && (n.data as { bookingId?: string } | null)?.bookingId ? `/app/bookings/${(n.data as { bookingId: string }).bookingId}` : "/app/profile",
   });
   const unread = items.filter((n) => !n.readAt).map(toUi);
   const earlier = items.filter((n) => n.readAt).map(toUi);

@@ -8,6 +8,7 @@ import { GAME_FORMATS } from "@/lib/catalog";
 import { formatInZone, utcToZoned } from "@/lib/time";
 import { cancelGameSchema, createGameSessionSchema, fieldErrors, gameDiscoverSchema, gameListSchema, inviteToGameSchema, updateGameSessionSchema } from "@/lib/validation/schemas";
 import { notify } from "./notifications";
+import { requireActivePair } from "./pairs";
 
 /* ------------------------------------------------------------------ Shared select and view */
 
@@ -27,6 +28,10 @@ export const gameSelect = {
   visibility: true,
   status: true,
   openToRequests: true,
+  joinPolicy: true,
+  levelPolicy: true,
+  pairId: true,
+  pair: { select: { id: true, name: true, playerAId: true, playerBId: true } },
   costMode: true,
   costPerPlayerCents: true,
   currency: true,
@@ -49,11 +54,13 @@ export const gameSelect = {
       status: true,
       invitedAt: true,
       respondedAt: true,
+      pairId: true,
       user: { select: { id: true, name: true, playerProfile: { select: { level: true, photoUrl: true, side: true } } } },
     },
     orderBy: [{ role: "asc" as const }, { createdAt: "asc" as const }],
   },
-  _count: { select: { requests: { where: { status: "PENDING" as const } } } },
+  /** Open requests only; the full history is read through matchmaking.listSessionRequests. */
+  requests: { where: { status: { in: ["PENDING", "WAITLISTED"] } }, select: { id: true, userId: true, kind: true, pairId: true, spots: true, status: true, pair: { select: { playerAId: true, playerBId: true } } }, orderBy: { createdAt: "asc" as const } },
 } satisfies Prisma.GameSessionSelect;
 
 type GameRow = Prisma.GameSessionGetPayload<{ select: typeof gameSelect }>;
@@ -66,6 +73,8 @@ export type GameView = GameRow & {
   spotsLeft: number;
   /** What each player pays under the chosen cost mode; null when the organizer covers it or it is free. */
   sharePerPlayerCents: number | null;
+  pendingRequests: number;
+  waitlistedRequests: number;
 };
 
 const LIVE: GameStatus[] = ["DRAFT", "OPEN", "FULL", "CONFIRMED", "IN_PROGRESS"];
@@ -80,7 +89,9 @@ export function decorate(row: GameRow): GameView {
   if (row.costMode === "SPLIT_EVENLY") sharePerPlayerCents = Math.ceil(row.booking.priceCents / row.maxPlayers);
   else if (row.costMode === "FIXED_PER_PLAYER") sharePerPlayerCents = row.costPerPlayerCents ?? 0;
   else if (row.costMode === "FREE") sharePerPlayerCents = 0;
-  return { ...row, acceptedCount, invitedCount, spotsLeft, sharePerPlayerCents };
+  const pendingRequests = row.requests.filter((r) => r.status === "PENDING").length;
+  const waitlistedRequests = row.requests.filter((r) => r.status === "WAITLISTED").length;
+  return { ...row, acceptedCount, invitedCount, spotsLeft, sharePerPlayerCents, pendingRequests, waitlistedRequests };
 }
 
 /* ------------------------------------------------------------------ Helpers */
@@ -148,8 +159,11 @@ export async function createGameSession(actor: Actor | null, input: unknown, opt
   const a = await requirePermission(actor, "session.create.own");
   const parsed = createGameSessionSchema.safeParse(input);
   if (!parsed.success) throw validation("Check the highlighted fields.", fieldErrors(parsed.error));
-  const { bookingId, inviteUserIds, maxPlayers: requestedMax, ...details } = parsed.data;
+  const { bookingId, inviteUserIds, maxPlayers: requestedMax, pairId, ...details } = parsed.data;
   const now = opts.now ?? new Date();
+  // Playing as a pair: the partner is invited (and must accept) and the game records the pair as team A.
+  const pair = pairId ? await requireActivePair(a, pairId) : null;
+  const partnerId = pair ? (pair.playerAId === a.id ? pair.playerBId : pair.playerAId) : null;
 
   const booking = await db.booking.findUnique({ where: { id: bookingId }, select: { id: true, playerId: true, locationId: true, courtId: true, startsAt: true, endsAt: true, status: true, gameSession: { select: { id: true, code: true } } } });
   if (!booking) throw notFound("Booking");
@@ -159,7 +173,9 @@ export async function createGameSession(actor: Actor | null, input: unknown, opt
   if (booking.gameSession) throw new AppError("CONFLICT", `A game (${booking.gameSession.code}) already exists for this booking.`);
 
   const maxPlayers = playersFor(details.format, requestedMax);
-  const invitees = [...new Set(inviteUserIds)].filter((id) => id !== a.id);
+  if (pair && maxPlayers < 4) throw validation("A pair needs a game of at least four players.");
+  if (!pair && details.joinPolicy === "PAIRS_ONLY") throw validation("A pair challenge is opened by a pair. Confirm a pair first.", { joinPolicy: "Needs a pair" });
+  const invitees = [...new Set([...(partnerId ? [partnerId] : []), ...inviteUserIds])].filter((id) => id !== a.id);
   if (invitees.length > maxPlayers - 1) throw validation(`You can invite at most ${maxPlayers - 1} players for this format.`, { inviteUserIds: `Max ${maxPlayers - 1}` });
   if (invitees.length) {
     const found = await db.user.count({ where: { id: { in: invitees }, status: "ACTIVE" } });
@@ -180,9 +196,13 @@ export async function createGameSession(actor: Actor | null, input: unknown, opt
         startsAt: booking.startsAt,
         endsAt: booking.endsAt,
         maxPlayers,
+        pairId: pair?.id ?? null,
         ...details,
         participants: {
-          create: [{ userId: a.id, role: "ORGANIZER", status: "ACCEPTED", invitedById: a.id, respondedAt: now }, ...invitees.map((userId) => ({ userId, role: "PLAYER" as const, status: "INVITED" as const, invitedById: a.id }))],
+          create: [
+            { userId: a.id, role: "ORGANIZER", status: "ACCEPTED", invitedById: a.id, respondedAt: now, pairId: pair?.id ?? null },
+            ...invitees.map((userId) => ({ userId, role: "PLAYER" as const, status: "INVITED" as const, invitedById: a.id, pairId: pair && userId === partnerId ? pair.id : null })),
+          ],
         },
       },
       select: gameSelect,
@@ -357,14 +377,16 @@ export async function leaveGame(actor: Actor | null, sessionId: string, opts: { 
   if (!me || me.status !== "ACCEPTED") throw forbidden("You are not in this game.");
   if (me.role === "ORGANIZER") throw validation("The organizer cannot leave. Cancel the game instead.");
   requireStatus(g, ["DRAFT", "OPEN", "FULL", "CONFIRMED"], "left");
+  let promoted: string[] = [];
   const updated = await db.$transaction(async (tx) => {
     await tx.gameParticipant.update({ where: { id: me.id }, data: { status: "LEFT", respondedAt: opts.now ?? new Date() } });
     const next = fillStatus(g.status, g.acceptedCount - 1, g.maxPlayers);
     if (next !== g.status) await tx.gameSession.update({ where: { id: g.id }, data: { status: next } });
     await audit({ actorId: a.id, action: "game.left", entityType: "GameSession", entityId: g.id, locationId: g.locationId, metadata: { status: next } }, tx);
+    promoted = await promoteWaitlist(tx, g.id);
     return load(g.id, tx);
   });
-  await notify(g.organizerId, { type: "game.left", title: `${a.name} left your game`, body: `${updated.spotsLeft} spot${updated.spotsLeft === 1 ? "" : "s"} open · ${when(g)}`, data: { gameId: g.id, code: g.code } });
+  await notify(g.organizerId, { type: "game.left", title: `${a.name} left your game`, body: `${updated.spotsLeft} spot${updated.spotsLeft === 1 ? "" : "s"} open${promoted.length ? ` · ${promoted.length} waitlisted request${promoted.length === 1 ? "" : "s"} now pending` : ""} · ${when(g)}`, data: { gameId: g.id, code: g.code } });
   return updated;
 }
 
@@ -382,6 +404,7 @@ export async function removeParticipant(actor: Actor | null, sessionId: string, 
     const next = wasAccepted ? fillStatus(g.status, g.acceptedCount - 1, g.maxPlayers) : g.status;
     if (next !== g.status) await tx.gameSession.update({ where: { id: g.id }, data: { status: next } });
     await audit({ actorId: a.id, action: wasAccepted ? "game.participant_removed" : "game.invite_withdrawn", entityType: "GameSession", entityId: g.id, locationId: g.locationId, metadata: { userId } }, tx);
+    if (wasAccepted) await promoteWaitlist(tx, g.id);
     return load(g.id, tx);
   });
   await notify(userId, { type: "game.removed", title: wasAccepted ? "You were removed from a game" : "An invitation was withdrawn", body: when(g), data: { gameId: g.id, code: g.code } });
@@ -412,6 +435,7 @@ export async function updateGameSession(actor: Actor | null, sessionId: string, 
     const next = fillStatus(fresh.status, fresh.acceptedCount, fresh.maxPlayers);
     if (next !== fresh.status) await tx.gameSession.update({ where: { id: g.id }, data: { status: next } });
     await audit({ actorId: a.id, action: "game.updated", entityType: "GameSession", entityId: g.id, locationId: g.locationId, metadata: { fields: Object.keys(parsed.data) } }, tx);
+    if (fresh.spotsLeft > 0) await promoteWaitlist(tx, g.id);
     return load(g.id, tx);
   });
   return updated;
@@ -461,12 +485,14 @@ export async function cancelGame(actor: Actor | null, sessionId: string, input: 
   if (!isOrganizer(a, g) && !staff) throw forbidden();
   requireStatus(g, LIVE, "cancelled");
   const now = opts.now ?? new Date();
+  let requesters: string[] = [];
   const updated = await db.$transaction(async (tx) => {
     await tx.gameSession.update({ where: { id: g.id }, data: { status: "CANCELLED", cancelledAt: now, cancelledById: a.id, cancelReason: parsed.data.reason } });
     await audit({ actorId: a.id, action: "game.cancelled", entityType: "GameSession", entityId: g.id, locationId: g.locationId, metadata: { byStaff: staff, reason: parsed.data.reason } }, tx);
+    requesters = await expireRequestsForGame(tx, g.id);
     return load(g.id, tx);
   });
-  const others = g.participants.filter((p) => ["ACCEPTED", "INVITED"].includes(p.status) && p.userId !== a.id).map((p) => p.userId);
+  const others = [...new Set([...g.participants.filter((p) => ["ACCEPTED", "INVITED"].includes(p.status)).map((p) => p.userId), ...requesters])].filter((id) => id !== a.id);
   await Promise.all(others.map((userId) => notify(userId, { type: "game.cancelled", title: "Game cancelled", body: parsed.data.reason ? `${when(g)} · ${parsed.data.reason}` : when(g), data: { gameId: g.id, code: g.code } })));
   return updated;
 }
@@ -478,6 +504,7 @@ export async function cancelGame(actor: Actor | null, sessionId: string, input: 
  * drafts that were never published expire. Cheap enough to run on reads.
  */
 export async function advanceElapsedGames(now = new Date()): Promise<{ started: number; completed: number; expired: number }> {
+  await db.gameJoinRequest.updateMany({ where: { status: { in: ["PENDING", "WAITLISTED"] }, OR: [{ expiresAt: { lte: now } }, { session: { startsAt: { lte: now } } }] }, data: { status: "EXPIRED" } });
   const [completed, started, expired] = await Promise.all([
     db.gameSession.updateMany({ where: { status: { in: ["OPEN", "FULL", "CONFIRMED", "IN_PROGRESS"] }, endsAt: { lte: now } }, data: { status: "COMPLETED" } }),
     db.gameSession.updateMany({ where: { status: { in: ["OPEN", "FULL", "CONFIRMED"] }, startsAt: { lte: now }, endsAt: { gt: now } }, data: { status: "IN_PROGRESS" } }),
@@ -495,7 +522,8 @@ export async function cancelGameForBooking(tx: Prisma.TransactionClient, booking
   if (!g || !LIVE.includes(g.status)) return null;
   await tx.gameSession.update({ where: { id: g.id }, data: { status: "CANCELLED", cancelledAt: now, cancelledById: actorId, cancelReason: "Court booking cancelled" } });
   await audit({ actorId, action: "game.cancelled", entityType: "GameSession", entityId: g.id, locationId: g.locationId, metadata: { reason: "booking cancelled", bookingId } }, tx);
-  const userIds = g.participants.filter((p) => ["ACCEPTED", "INVITED"].includes(p.status) && p.userId !== actorId).map((p) => p.userId);
+  const requesters = await expireRequestsForGame(tx, g.id);
+  const userIds = [...g.participants.filter((p) => ["ACCEPTED", "INVITED"].includes(p.status)).map((p) => p.userId), ...requesters].filter((id) => id !== actorId);
   if (g.organizerId !== actorId) userIds.push(g.organizerId);
   return { gameId: g.id, code: g.code, userIds: [...new Set(userIds)] };
 }
@@ -508,4 +536,35 @@ export async function moveGameToBooking(tx: Prisma.TransactionClient, oldBooking
   await audit({ actorId, action: "game.moved", entityType: "GameSession", entityId: g.id, locationId: g.locationId, metadata: { from: oldBookingId, to: next.id, startsAt: next.startsAt } }, tx);
   const userIds = g.participants.filter((p) => ["ACCEPTED", "INVITED"].includes(p.status) && p.userId !== actorId).map((p) => p.userId);
   return { gameId: g.id, code: g.code, userIds: [...new Set(userIds)] };
+}
+
+/* ------------------------------------------------------------------ Join-request hooks shared with matchmaking.ts */
+
+/** Open requests on a cancelled game expire. Returns the requesters (and pair partners) to notify. */
+export async function expireRequestsForGame(tx: Prisma.TransactionClient, gameId: string): Promise<string[]> {
+  const open = await tx.gameJoinRequest.findMany({ where: { sessionId: gameId, status: { in: ["PENDING", "WAITLISTED"] } }, select: { id: true, userId: true, pair: { select: { playerAId: true, playerBId: true } } } });
+  if (open.length === 0) return [];
+  await tx.gameJoinRequest.updateMany({ where: { id: { in: open.map((r) => r.id) } }, data: { status: "EXPIRED" } });
+  return [...new Set(open.flatMap((r) => [r.userId, ...(r.pair ? [r.pair.playerAId, r.pair.playerBId] : [])]))];
+}
+
+/**
+ * When spots reopen, waitlisted requests that now fit become PENDING again (oldest first). Nothing is accepted:
+ * the organizer still decides. Returns the ids of the promoted requests.
+ */
+export async function promoteWaitlist(tx: Prisma.TransactionClient, gameId: string): Promise<string[]> {
+  const g = await load(gameId, tx);
+  if (g.status !== "OPEN" || g.spotsLeft === 0) return [];
+  const waiting = await tx.gameJoinRequest.findMany({ where: { sessionId: gameId, status: "WAITLISTED" }, orderBy: { createdAt: "asc" }, select: { id: true, spots: true } });
+  const fit = waiting.filter((r) => r.spots <= g.spotsLeft).map((r) => r.id);
+  if (fit.length) await tx.gameJoinRequest.updateMany({ where: { id: { in: fit } }, data: { status: "PENDING" } });
+  return fit;
+}
+
+/** Once a game fills, the remaining pending requests wait. Returns the requester ids to notify. */
+export async function waitlistPending(tx: Prisma.TransactionClient, gameId: string): Promise<string[]> {
+  const pending = await tx.gameJoinRequest.findMany({ where: { sessionId: gameId, status: "PENDING" }, select: { id: true, userId: true } });
+  if (pending.length === 0) return [];
+  await tx.gameJoinRequest.updateMany({ where: { id: { in: pending.map((r) => r.id) } }, data: { status: "WAITLISTED" } });
+  return pending.map((r) => r.userId);
 }

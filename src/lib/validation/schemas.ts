@@ -325,6 +325,8 @@ const gameDetails = z.object({
   matchType: z.enum(["FRIENDLY", "COMPETITIVE", "ANY"]).default("ANY"),
   visibility: gameVisibilitySchema.default("PRIVATE"),
   openToRequests: z.coerce.boolean().default(false),
+  joinPolicy: z.enum(["OPEN", "SOLO_ONLY", "PAIRS_ONLY"]).default("OPEN"),
+  levelPolicy: z.enum(["EXACT", "ADJACENT"]).default("EXACT"),
   costMode: gameCostModeSchema.default("SPLIT_EVENLY"),
   costPerPlayerCents: z.coerce.number().int().min(0).max(1_000_000).nullable().optional(),
   description: optionalText(500),
@@ -335,7 +337,7 @@ const fixedCostNeedsAmount = (v: { costMode?: string; costPerPlayerCents?: numbe
   if (v.costMode === "FIXED_PER_PLAYER" && (v.costPerPlayerCents ?? 0) <= 0) ctx.addIssue({ code: "custom", path: ["costPerPlayerCents"], message: "Enter the amount each player pays." });
 };
 
-export const createGameSessionSchema = gameDetails.extend({ bookingId: z.string().cuid(), inviteUserIds: z.array(z.string().cuid()).max(15).default([]) }).superRefine(fixedCostNeedsAmount);
+export const createGameSessionSchema = gameDetails.extend({ bookingId: z.string().cuid(), inviteUserIds: z.array(z.string().cuid()).max(15).default([]), pairId: z.string().cuid().optional() }).superRefine(fixedCostNeedsAmount);
 export const updateGameSessionSchema = gameDetails.partial().superRefine(fixedCostNeedsAmount);
 
 export const inviteToGameSchema = z.object({ userIds: z.array(z.string().cuid()).min(1).max(15) });
@@ -357,3 +359,35 @@ export const gameListSchema = z.object({
 });
 
 export const playerSearchSchema = z.object({ q: z.string().trim().min(2).max(80), take: z.coerce.number().int().min(1).max(20).default(8) });
+
+/* ------------------------------------------------------------------ Matchmaking (phase: matchmaking) */
+
+export const findMatchesSchema = z.object({
+  dateISO: dateISOSchema.optional(),
+  startMinutes: z.coerce.number().int().min(0).max(24 * 60).optional(),
+  endMinutes: z.coerce.number().int().min(0).max(24 * 60).optional(),
+  locationIds: z.array(z.string().cuid()).max(10).default([]),
+  /** SOLO = one spot for me; PAIR = both spots for my pair. */
+  kind: z.enum(["SOLO", "PAIR"]).default("SOLO"),
+  pairId: z.string().cuid().optional(),
+  take: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+export const joinRequestSchema = z.object({
+  kind: z.enum(["SOLO", "PAIR"]).default("SOLO"),
+  pairId: z.string().cuid().optional(),
+  message: z.string().trim().max(300).optional().or(z.literal("").transform(() => undefined)),
+});
+
+export const decideRequestSchema = z.object({
+  decision: z.enum(["ACCEPT", "DECLINE"]),
+  note: z.string().trim().max(300).optional().or(z.literal("").transform(() => undefined)),
+});
+
+export const pairProposalSchema = z.object({ partnerUserId: z.string().cuid(), name: z.string().trim().max(60).optional().or(z.literal("").transform(() => undefined)) });
+
+export const matchmakingConfigSchema = z.object({
+  allowAdjacentLevels: z.coerce.boolean(),
+  requestExpiryHours: z.coerce.number().int().min(1).max(24 * 14),
+  maxOpenRequests: z.coerce.number().int().min(1).max(20),
+});

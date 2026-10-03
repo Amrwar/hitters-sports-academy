@@ -109,14 +109,44 @@
   },
   {
     "name": "player-play",
-    "caption": "Play: invitations with one-tap accept or decline, then my upcoming games.",
+    "caption": "Play, For you: ranked matches for my level with the reasons, Find a match, my pairs.",
     "file": "docs/screenshots/player-play.png",
     "viewport": "phone"
   },
   {
-    "name": "player-play-discover",
-    "caption": "Discover: public open games with free spots, filtered by level, club and day.",
-    "file": "docs/screenshots/player-play-discover.png",
+    "name": "player-play-games",
+    "caption": "Play, My games: invitations with one-tap accept or decline, then upcoming games.",
+    "file": "docs/screenshots/player-play-games.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-play-requests",
+    "caption": "Play, Requests: players asking to join my games with level and reasons; games I asked to join.",
+    "file": "docs/screenshots/player-play-requests.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-play-find",
+    "caption": "Find a match: day, time window, clubs, solo or pair; every result explains why it matches.",
+    "file": "docs/screenshots/player-play-find.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-game-requests",
+    "caption": "Organizer review: who is asking, official level, spots needed, compatibility now, history, accept or decline.",
+    "file": "docs/screenshots/player-game-requests.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-game-ask",
+    "caption": "Game page for a compatible player: match reasons and Request to join; the organizer decides.",
+    "file": "docs/screenshots/player-game-ask.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-pairs",
+    "caption": "Pairs: propose a partner, confirm, request two spots together or take a challenge.",
+    "file": "docs/screenshots/player-pairs.png",
     "viewport": "phone"
   },
   {
@@ -219,6 +249,12 @@
     "name": "admin-games",
     "caption": "Games across the staff member's locations: lineup, levels, cost, status, cancel.",
     "file": "docs/screenshots/admin-games.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-settings",
+    "caption": "Academy settings: matchmaking rules (adjacent levels, request expiry, open-request cap) and the scoring table.",
+    "file": "docs/screenshots/admin-settings.png",
     "viewport": "desktop"
   }
 ]

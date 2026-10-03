@@ -5,16 +5,20 @@ import { clearRateLimits } from "@/lib/auth/rate-limit";
 import { invalidatePermissionCache, type Actor } from "@/lib/auth/authorize";
 import { mailOutbox } from "@/lib/mail";
 import { seedRolePermissions } from "@/server/services/permissions-seed";
+import { invalidateMatchmakingConfigCache } from "@/server/services/matchmaking";
+import { invalidateLevelCache } from "@/server/services/levels";
 import { buildActor } from "@/server/services/sessions";
 
 export const PASSWORD = "Correct-horse-9";
 
 export async function resetDb() {
   await db.$executeRawUnsafe(
-    `TRUNCATE TABLE "AuditLog","Notification","GameJoinRequest","GameParticipant","GameSession","Payment","BookingParticipant","Booking","TrainingRecord","AssessmentRequest","Assessment","LevelDefinition","_PreferredLocations","PricingRule","CourtClosure","CourtAvailability","Court","LocationPhoto","BookingPolicy","StaffMembership","PlayerProfile","VerificationToken","Session","RolePermission","Location","User" RESTART IDENTITY CASCADE`,
+    `TRUNCATE TABLE "AuditLog","Notification","MatchmakingConfig","GameJoinRequest","GameParticipant","GameSession","Pair","Payment","BookingParticipant","Booking","TrainingRecord","AssessmentRequest","Assessment","LevelDefinition","_PreferredLocations","PricingRule","CourtClosure","CourtAvailability","Court","LocationPhoto","BookingPolicy","StaffMembership","PlayerProfile","VerificationToken","Session","RolePermission","Location","User" RESTART IDENTITY CASCADE`,
   );
   await seedRolePermissions(db);
   invalidatePermissionCache();
+  invalidateMatchmakingConfigCache();
+  invalidateLevelCache();
   clearRateLimits();
   mailOutbox.length = 0;
 }

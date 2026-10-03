@@ -226,13 +226,37 @@ enum GameParticipantStatus {
   REMOVED
 }
 
-/// Reserved for the join-request phase; no rows are written yet.
+/// Lifecycle of a request to join a game. WAITLISTED = the game is full right now; it returns to PENDING when a spot reopens.
 enum GameRequestStatus {
   PENDING
+  WAITLISTED
   ACCEPTED
   DECLINED
   WITHDRAWN
   EXPIRED
+}
+
+enum GameRequestKind {
+  SOLO
+  PAIR
+}
+
+/// Who may request the open spots. PAIRS_ONLY is a challenge: the organizer's pair wants an opposing pair.
+enum GameJoinPolicy {
+  OPEN
+  SOLO_ONLY
+  PAIRS_ONLY
+}
+
+/// EXACT = only the listed levels. ADJACENT = one rank above or below is welcome too, when the academy allows it.
+enum GameLevelPolicy {
+  EXACT
+  ADJACENT
+}
+
+enum PairStatus {
+  PENDING
+  ACTIVE
 }
 
 // ---------------------------------------------------------------- Identity
@@ -273,6 +297,9 @@ model User {
   gameInvitesSent     GameParticipant[]    @relation("GameParticipantInvitedBy")
   gameRequests        GameJoinRequest[]    @relation("GameRequestUser")
   gameRequestsDecided GameJoinRequest[]    @relation("GameRequestDecidedBy")
+  pairsAsA            Pair[]               @relation("PairPlayerA")
+  pairsAsB            Pair[]               @relation("PairPlayerB")
+  pairsCreated        Pair[]               @relation("PairCreatedBy")
 
   @@index([status])
   @@index([globalRole])
@@ -706,8 +733,12 @@ model GameSession {
   matchType          MatchTypePreference @default(ANY)
   visibility         GameVisibility      @default(PRIVATE)
   status             GameStatus          @default(DRAFT)
-  /// Remaining spots may be requested by players who were not invited (join requests ship next phase).
+  /// Remaining spots may be requested by players who were not invited.
   openToRequests     Boolean             @default(false)
+  joinPolicy         GameJoinPolicy      @default(OPEN)
+  levelPolicy        GameLevelPolicy     @default(EXACT)
+  /// Set when the organizer plays as a pair (team A of a challenge).
+  pairId             String?
   costMode           GameCostMode        @default(SPLIT_EVENLY)
   /// Set for FIXED_PER_PLAYER; for SPLIT_EVENLY the share is derived from the booking price.
   costPerPlayerCents Int?
@@ -728,6 +759,7 @@ model GameSession {
   booking      Booking           @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   location     Location          @relation(fields: [locationId], references: [id], onDelete: Restrict)
   court        Court             @relation(fields: [courtId], references: [id], onDelete: Restrict)
+  pair         Pair?             @relation("SessionPair", fields: [pairId], references: [id], onDelete: SetNull)
   participants GameParticipant[]
   requests     GameJoinRequest[]
 
@@ -744,6 +776,8 @@ model GameParticipant {
   role        GameParticipantRole   @default(PLAYER)
   status      GameParticipantStatus @default(INVITED)
   invitedById String?
+  /// Set when the player joined as half of a pair; the lineup shows teams.
+  pairId      String?
   invitedAt   DateTime              @default(now())
   respondedAt DateTime?
   createdAt   DateTime              @default(now())
@@ -752,30 +786,77 @@ model GameParticipant {
   session   GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   user      User        @relation("GameParticipantUser", fields: [userId], references: [id], onDelete: Cascade)
   invitedBy User?       @relation("GameParticipantInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+  pair      Pair?       @relation("ParticipantPair", fields: [pairId], references: [id], onDelete: SetNull)
 
   @@unique([sessionId, userId])
   @@index([userId, status])
 }
 
-/// A player asking to join an open spot. Written by the join-request phase; organizers decide, never automation.
+/// A player (or a pair) asking for open spots. Organizers decide; nothing is accepted automatically.
+/// `spots` is 1 for SOLO and 2 for PAIR and is reserved atomically on acceptance (see matchmaking.ts).
 model GameJoinRequest {
-  id          String            @id @default(cuid())
-  sessionId   String
-  userId      String
-  status      GameRequestStatus @default(PENDING)
-  message     String?           @db.VarChar(300)
-  decidedById String?
-  decidedAt   DateTime?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id           String            @id @default(cuid())
+  sessionId    String
+  /// The requesting player; for a PAIR request, the member who sent it.
+  userId       String
+  kind         GameRequestKind   @default(SOLO)
+  pairId       String?
+  spots        Int               @default(1)
+  status       GameRequestStatus @default(PENDING)
+  message      String?           @db.VarChar(300)
+  /// Deterministic match score and the reasons shown to both sides, captured when the request was made.
+  score        Int               @default(0)
+  reasons      String[]          @default([])
+  expiresAt    DateTime?
+  decidedById  String?
+  decidedAt    DateTime?
+  decisionNote String?           @db.VarChar(300)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
   session   GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   user      User        @relation("GameRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+  pair      Pair?       @relation("RequestPair", fields: [pairId], references: [id], onDelete: SetNull)
   decidedBy User?       @relation("GameRequestDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
 
   @@unique([sessionId, userId])
   @@index([sessionId, status])
   @@index([userId, status])
+}
+
+/// Two players who play together. Created by one, confirmed by the other; a pair requests both spots at once
+/// and is never split. playerAId < playerBId so a duo exists once.
+model Pair {
+  id          String     @id @default(cuid())
+  name        String?    @db.VarChar(60)
+  playerAId   String
+  playerBId   String
+  createdById String
+  status      PairStatus @default(PENDING)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  playerA      User              @relation("PairPlayerA", fields: [playerAId], references: [id], onDelete: Cascade)
+  playerB      User              @relation("PairPlayerB", fields: [playerBId], references: [id], onDelete: Cascade)
+  createdBy    User              @relation("PairCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  sessions     GameSession[]     @relation("SessionPair")
+  participants GameParticipant[] @relation("ParticipantPair")
+  requests     GameJoinRequest[] @relation("RequestPair")
+
+  @@unique([playerAId, playerBId])
+  @@index([playerBId, status])
+}
+
+/// Academy-wide matchmaking rules. One row ("default"); only global roles change it.
+model MatchmakingConfig {
+  id                  String   @id @default("default")
+  /// When true, a session whose levelPolicy is ADJACENT also welcomes one rank above and below.
+  allowAdjacentLevels Boolean  @default(false)
+  /// Pending requests expire this long after they are made (and always when the game starts).
+  requestExpiryHours  Int      @default(48)
+  /// Open requests a player may have at once.
+  maxOpenRequests     Int      @default(5)
+  updatedAt           DateTime @updatedAt
 }
 
 // ---------------------------------------------------------------- Staff

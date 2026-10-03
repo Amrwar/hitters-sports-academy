@@ -190,6 +190,29 @@ async function main() {
   await ensureGame("GM-SEED04", bSalma.id, "salma@example.com", { format: "SINGLES", maxPlayers: 2, levels: ["A"], matchType: "COMPETITIVE", visibility: "PUBLIC", status: "FULL", costMode: "ORGANIZER_PAYS", description: "Morning singles, Maadi", publishedAt: new Date() }, [{ email: "omar@example.com", status: "ACCEPTED" }]);
   console.log("games: done");
 
+  // Matchmaking demo: confirmed pairs, a game of Amr's with a pending request, and a pair challenge.
+  const ensurePair = async (a: string, b: string, name: string) => {
+    const [playerAId, playerBId] = [userIds.get(a)!, userIds.get(b)!].sort();
+    return db.pair.upsert({ where: { playerAId_playerBId: { playerAId, playerBId } }, create: { playerAId, playerBId, createdById: userIds.get(a)!, name, status: "ACTIVE" }, update: { status: "ACTIVE", name } });
+  };
+  const pairOmarSalma = await ensurePair("omar@example.com", "salma@example.com", "Smash Bros");
+  const pairAmrKarim = await ensurePair("amr@example.com", "karim@example.com", "Degla Lobs");
+  await db.matchmakingConfig.upsert({ where: { id: "default" }, create: { id: "default", allowAdjacentLevels: true }, update: {} });
+  const bAmr2 = await ensureBooking("HT-SEED05", "amr@example.com", "new-cairo", "Court 5", 3, 20, 90, 67500);
+  await ensureGame("GM-SEED06", bAmr2.id, "amr@example.com", { format: "DOUBLES", maxPlayers: 4, levels: ["B"], levelPolicy: "ADJACENT", matchType: "FRIENDLY", visibility: "PUBLIC", status: "OPEN", openToRequests: true, costMode: "SPLIT_EVENLY", description: "Thursday social doubles", notes: "Court 5 is outdoor, bring a cap.", publishedAt: new Date() }, [{ email: "karim@example.com", status: "ACCEPTED" }]);
+  const gAmr2 = await db.gameSession.findUniqueOrThrow({ where: { code: "GM-SEED06" } });
+  await db.gameJoinRequest.upsert({
+    where: { sessionId_userId: { sessionId: gAmr2.id, userId: userIds.get("laila@example.com")! } },
+    create: { sessionId: gAmr2.id, userId: userIds.get("laila@example.com")!, kind: "SOLO", spots: 1, status: "PENDING", message: "Right side, happy to split the court.", score: 40 + 25 + 10 + 4, reasons: ["Level B match", "Preferred location", "One of your preferred times", "2 spots remaining"], expiresAt: gAmr2.startsAt },
+    update: {},
+  });
+  await db.notification.create({ data: { userId: userIds.get("amr@example.com")!, type: "game.request", title: "Laila Mansour asked to join your game", body: "Level B match · Preferred location · GM-SEED06", data: { code: "GM-SEED06" } } });
+  const bOmar2 = await ensureBooking("HT-SEED06", "omar@example.com", "new-cairo", "Court 2", 5, 19, 90, 67500);
+  await ensureGame("GM-SEED07", bOmar2.id, "omar@example.com", { format: "DOUBLES", maxPlayers: 4, levels: ["A", "B"], matchType: "COMPETITIVE", visibility: "PUBLIC", status: "OPEN", openToRequests: true, joinPolicy: "PAIRS_ONLY", pairId: pairOmarSalma.id, costMode: "SPLIT_EVENLY", description: "Challenge: Smash Bros want opponents", publishedAt: new Date() }, [{ email: "salma@example.com", status: "ACCEPTED" }]);
+  await db.gameParticipant.updateMany({ where: { sessionId: (await db.gameSession.findUniqueOrThrow({ where: { code: "GM-SEED07" } })).id, userId: { in: [userIds.get("omar@example.com")!, userIds.get("salma@example.com")!] } }, data: { pairId: pairOmarSalma.id } });
+  void pairAmrKarim;
+  console.log("matchmaking: done");
+
   console.log(`\nSeed complete. Sign in with any seeded email and the development password defined in prisma/seed.ts.`);
 }
 

@@ -122,9 +122,20 @@ try {
   await go(page, "/app/notifications");
   await shot(page, "player-notifications", "In-app notifications: bookings, assessments and staff updates.", { viewport: "phone" });
   await go(page, "/app/play");
-  await shot(page, "player-play", "Play: invitations with one-tap accept or decline, then my upcoming games.", { viewport: "phone" });
-  await go(page, "/app/play?tab=discover");
-  await shot(page, "player-play-discover", "Discover: public open games with free spots, filtered by level, club and day.", { viewport: "phone" });
+  await shot(page, "player-play", "Play, For you: ranked matches for my level with the reasons, Find a match, my pairs.", { viewport: "phone", fullPage: true });
+  await go(page, "/app/play?tab=games");
+  await shot(page, "player-play-games", "Play, My games: invitations with one-tap accept or decline, then upcoming games.", { viewport: "phone" });
+  await go(page, "/app/play?tab=requests");
+  await shot(page, "player-play-requests", "Play, Requests: players asking to join my games with level and reasons; games I asked to join.", { viewport: "phone", fullPage: true });
+  await go(page, "/app/play/find");
+  await page.waitForFunction(() => /match(es)?$/m.test(document.body.innerText) || document.body.innerText.includes("No open games fit"), { timeout: 60_000 }).catch(() => undefined);
+  await shot(page, "player-play-find", "Find a match: day, time window, clubs, solo or pair; every result explains why it matches.", { viewport: "phone", fullPage: true });
+  await go(page, "/app/play/GM-SEED06");
+  await shot(page, "player-game-requests", "Organizer review: who is asking, official level, spots needed, compatibility now, history, accept or decline.", { viewport: "phone", fullPage: true });
+  await go(page, "/app/play/GM-SEED03");
+  await shot(page, "player-game-ask", "Game page for a compatible player: match reasons and Request to join; the organizer decides.", { viewport: "phone", fullPage: true });
+  await go(page, "/app/play/pairs");
+  await shot(page, "player-pairs", "Pairs: propose a partner, confirm, request two spots together or take a challenge.", { viewport: "phone" });
   await go(page, "/app/play/GM-SEED01");
   await shot(page, "player-game-invite", "Game as an invited player: lineup, spots, levels, cost, accept or decline.", { viewport: "phone", fullPage: true });
   await go(page, "/app/play/GM-SEED02");
@@ -173,6 +184,8 @@ try {
   await shot(page, "admin-staff", "Staff roles per location with grant and revoke.", { viewport: "desktop" });
   await go(page, "/admin/games");
   await shot(page, "admin-games", "Games across the staff member's locations: lineup, levels, cost, status, cancel.", { viewport: "desktop" });
+  await go(page, "/admin/settings");
+  await shot(page, "admin-settings", "Academy settings: matchmaking rules (adjacent levels, request expiry, open-request cap) and the scoring table.", { viewport: "desktop" });
   await page.close();
 } finally {
   await browser.close();

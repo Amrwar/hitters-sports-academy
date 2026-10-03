@@ -48,6 +48,7 @@ export const PERMISSIONS = [
   "session.participate.own",
   "session.read",
   "session.manage",
+  "matchmaking.configure",
   // Messaging and audit
   "notification.send",
   "audit.read",
@@ -58,7 +59,7 @@ export const PERMISSIONS = [
 export type Permission = (typeof PERMISSIONS)[number];
 
 /** Permissions that are never location scoped. */
-export const GLOBAL_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>(["location.create", "roles.manage", "users.suspend", "users.manage", "levels.configure"]);
+export const GLOBAL_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>(["location.create", "roles.manage", "users.suspend", "users.manage", "levels.configure", "matchmaking.configure"]);
 
 const ALL = [...PERMISSIONS];
 

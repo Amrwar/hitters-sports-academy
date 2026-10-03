@@ -8,7 +8,9 @@ import { BookingRow } from "@/components/patterns/booking-row";
 import { GameCard } from "@/components/patterns/game-card";
 import { programs } from "@/data/mock";
 import { listMyBookings } from "@/server/services/bookings";
-import { discoverGames, listMyGames } from "@/server/services/game-sessions";
+import { listMyGames } from "@/server/services/game-sessions";
+import { findMatches } from "@/server/services/matchmaking";
+import { MatchReasons, MatchStrength } from "@/components/patterns/match-reasons";
 import { formatInZone } from "@/lib/time";
 import { requireActorOrRedirect } from "@/lib/auth/cookies";
 import { getMyProfile } from "@/server/services/profiles";
@@ -20,17 +22,14 @@ function greeting() {
 
 export default async function PlayerDashboard() {
   const actor = await requireActorOrRedirect("/app");
-  const [profile, upcoming, myGames, discoverable] = await Promise.all([getMyProfile(actor), listMyBookings(actor, "upcoming"), listMyGames(actor, "upcoming"), discoverGames(actor, { take: 20 })]);
+  const [profile, upcoming, myGames, found] = await Promise.all([getMyProfile(actor), listMyBookings(actor, "upcoming"), listMyGames(actor, "upcoming"), findMatches(actor, { take: 2 }).catch(() => null)]);
+  const recommended = found?.items ?? [];
   // Programs are still sample data until the academy phase ships.
   const next = upcoming[0];
   const live = myGames.find((g) => g.status === "IN_PROGRESS") ?? null;
   const invitations = myGames.filter((g) => g.participants.some((p) => p.userId === actor.id && p.status === "INVITED"));
   const nextGame = myGames.find((g) => g.status !== "IN_PROGRESS" && !invitations.includes(g)) ?? null;
-  const preferred = new Set([profile.homeLocationId, ...profile.preferredLocations.map((l) => l.id)].filter(Boolean));
-  const open = discoverable
-    .filter((g) => g.organizerId !== actor.id && !g.participants.some((p) => p.userId === actor.id))
-    .sort((a, b) => Number(preferred.has(b.locationId)) - Number(preferred.has(a.locationId)))
-    .slice(0, 2);
+
 
   return (
     <div className="space-y-7">
@@ -86,7 +85,7 @@ export default async function PlayerDashboard() {
 
       <div className="grid grid-cols-2 gap-3">
         <QuickAction href="/app/book" icon={<CalendarPlus />} label="Book a court" hint={upcoming.length ? upcoming.length + " upcoming" : "From EGP 400/h"} />
-        <QuickAction href="/app/play" icon={<Swords />} label="Play" hint={invitations.length ? `${invitations.length} invitation${invitations.length === 1 ? "" : "s"}` : open.length ? `${discoverable.length} open game${discoverable.length === 1 ? "" : "s"}` : "Organize a game"} />
+        <QuickAction href="/app/play" icon={<Swords />} label="Play" hint={invitations.length ? `${invitations.length} invitation${invitations.length === 1 ? "" : "s"}` : recommended.length ? `${recommended.length} match${recommended.length === 1 ? "" : "es"} for you` : "Find a match"} />
         <QuickAction href="/app/trainers" icon={<UserSquare2 />} label="Private coach" hint="Certified trainers" />
         <QuickAction href="/app/programs" icon={<GraduationCap />} label="Programs" hint="New intake Oct" />
       </div>
@@ -120,25 +119,28 @@ export default async function PlayerDashboard() {
 
       <section>
         <SectionHeader
-          eyebrow="Discover"
-          title="Open games for you"
+          eyebrow="Matchmaking"
+          title="Matches for you"
           action={
-            <Button variant="link" size="sm" href="/app/play?tab=discover" rightIcon={<ArrowRight />}>
-              See all
+            <Button variant="link" size="sm" href="/app/play/find" rightIcon={<ArrowRight />}>
+              Find a match
             </Button>
           }
         />
-        {open.length ? (
+        {recommended.length ? (
           <div className="space-y-3">
-            {open.map((g) => (
-              <GameCard key={g.id} game={g} viewerId={actor.id} href={`/app/play/${g.code}`} />
+            {recommended.map(({ game, match }) => (
+              <div key={game.id} className="space-y-2">
+                <GameCard game={game} viewerId={actor.id} href={`/app/play/${game.code}`} action={<MatchStrength score={match.score} />} />
+                <MatchReasons reasons={match.reasons} compact className="px-1" />
+              </div>
             ))}
           </div>
         ) : (
           <Card variant="outline" padding="md" className="flex items-center justify-between gap-3">
-            <span className="text-body-sm text-fg-muted">No open games at your clubs yet.</span>
-            <Button size="sm" variant="secondary" href="/app/play/new">
-              Organize one
+            <span className="text-body-sm text-fg-muted">{profile.level ? "No open games match your level right now." : "Get your official level to unlock matchmaking."}</span>
+            <Button size="sm" variant="secondary" href={profile.level ? "/app/play/new" : "/app/profile?tab=assessment"}>
+              {profile.level ? "Organize one" : "Get assessed"}
             </Button>
           </Card>
         )}

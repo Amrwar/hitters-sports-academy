@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PlayerLevel } from "@prisma/client";
-import { CalendarCheck, Check, Eye, EyeOff, LogOut, MapPin, Navigation, Pencil, Receipt, Share2, UserPlus, Users, X, XCircle } from "lucide-react";
+import { CalendarCheck, Check, Eye, EyeOff, Inbox, LogOut, MapPin, Navigation, Pencil, Receipt, Send, Share2, UserPlus, Users, X, XCircle } from "lucide-react";
 import { PageHeader } from "@/components/nav/player-nav";
 import { Button, IconButton } from "@/components/ui/button";
 import { Card, SectionHeader } from "@/components/ui/card";
@@ -18,22 +18,40 @@ import { useToast } from "@/components/ui/toast";
 import { money } from "@/components/patterns/booking-status";
 import { GameStatusBadge, costLabel } from "@/components/patterns/game-card";
 import { PlayerPicker, type PickedPlayer } from "@/components/patterns/player-picker";
-import { GAME_COST_MODES, GAME_VISIBILITY, MATCH_TYPES, gameFormatLabel } from "@/lib/catalog";
+import { MatchReasons, RequestStatusBadge } from "@/components/patterns/match-reasons";
+import { RequestReviewCard } from "@/components/patterns/request-card";
+import type { MatchResult } from "@/lib/matching";
+import type { RequestReview, RequestView } from "@/server/services/matchmaking";
+import { decideRequestAction, requestToJoinAction, withdrawRequestAction } from "@/server/actions/matchmaking";
+import { GAME_COST_MODES, GAME_JOIN_POLICIES, GAME_LEVEL_POLICIES, GAME_VISIBILITY, MATCH_TYPES, gameFormatLabel } from "@/lib/catalog";
 import { formatInZone } from "@/lib/time";
 import type { GameView } from "@/server/services/game-sessions";
 import { cancelGameAction, confirmGameAction, inviteToGameAction, leaveGameAction, publishGameAction, removeParticipantAction, respondToInviteAction, updateGameAction } from "@/server/actions/game-sessions";
 
-type Props = { game: GameView; viewerId: string; staffCanManage: boolean; levels: Record<string, string> };
+type Compat = (MatchResult & { waitlist: boolean }) | null;
+type Props = {
+  game: GameView;
+  viewerId: string;
+  staffCanManage: boolean;
+  levels: Record<string, string>;
+  compat: { solo: Compat; pair: Compat };
+  pairs: { id: string; label: string }[];
+  /** Organizer (or staff) review list; null for everyone else. */
+  requests: RequestReview[] | null;
+  myRequest: RequestView | null;
+};
 
-const ERROR_TITLES: Record<string, string> = { SESSION_FULL: "Game is full", INVALID_TRANSITION: "Not possible right now", FORBIDDEN: "Not allowed" };
+const ERROR_TITLES: Record<string, string> = { SESSION_FULL: "Game is full", INVALID_TRANSITION: "Not possible right now", FORBIDDEN: "Not allowed", NOT_ELIGIBLE: "Not eligible", CONFLICT: "Already there" };
 
 const PARTICIPANT_TONE = { ACCEPTED: "success", INVITED: "warning", DECLINED: "neutral", LEFT: "neutral", REMOVED: "neutral" } as const;
 const PARTICIPANT_LABEL = { ACCEPTED: "In", INVITED: "Invited", DECLINED: "Declined", LEFT: "Left", REMOVED: "Removed" } as const;
 
-export function GameDetail({ game, viewerId, staffCanManage, levels }: Props) {
+export function GameDetail({ game, viewerId, staffCanManage, levels, compat, pairs, requests, myRequest }: Props) {
   const router = useRouter();
   const { toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
+  const [ask, setAsk] = useState<"SOLO" | "PAIR" | null>(null);
+  const [askPair, setAskPair] = useState(pairs[0]?.id ?? "");
   const [invite, setInvite] = useState(false);
   const [picked, setPicked] = useState<PickedPlayer[]>([]);
   const [edit, setEdit] = useState(false);
@@ -54,6 +72,25 @@ export function GameDetail({ game, viewerId, staffCanManage, levels }: Props) {
   const lineup = game.participants.filter((p) => ["ACCEPTED", "INVITED"].includes(p.status));
   const past = game.participants.filter((p) => !["ACCEPTED", "INVITED"].includes(p.status));
   const heroTone = game.status === "CANCELLED" ? "default" : live || game.status === "IN_PROGRESS" ? "brand" : "default";
+  const openRequest = myRequest && (myRequest.status === "PENDING" || myRequest.status === "WAITLISTED") ? myRequest : null;
+  const canAskSolo = !!compat.solo && (compat.solo.eligible || compat.solo.waitlist);
+  const canAskPair = !!compat.pair && (compat.pair.eligible || compat.pair.waitlist);
+  const showAsk = !organizer && !openRequest && (!me || !["ACCEPTED", "INVITED"].includes(me.status)) && live && game.visibility === "PUBLIC";
+  const openRequests = (requests ?? []).filter((r) => r.status === "PENDING" || r.status === "WAITLISTED");
+  const decidedRequests = (requests ?? []).filter((r) => !["PENDING", "WAITLISTED"].includes(r.status));
+  const teamLabel = (pairId: string | null) => (pairId ? (pairId === game.pairId ? (game.pair?.name?.trim() || "Team A") : lineup.find((p) => p.pairId === pairId && p.userId !== viewerId)?.user.name.split(" ")[0] ? `Pair ${[...new Set(lineup.filter((p) => p.pairId === pairId).map((p) => p.user.name.split(" ")[0]))].join(" & ")}` : "Pair") : null);
+
+  async function sendRequest(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!ask) return;
+    const message = String(new FormData(e.currentTarget).get("message") ?? "");
+    const ok = await act("Request sent", () => requestToJoinAction(game.id, { kind: ask, pairId: ask === "PAIR" ? askPair : undefined, message: message || undefined }), "request");
+    if (ok) setAsk(null);
+  }
+
+  async function decide(requestId: string, decision: "ACCEPT" | "DECLINE", note?: string) {
+    return act(decision === "ACCEPT" ? "Added to the lineup" : "Request declined", () => decideRequestAction(requestId, { decision, note }), `req-${requestId}`);
+  }
 
   async function act(label: string, fn: () => Promise<{ ok: boolean; message?: string; code?: string }>, key = label) {
     setBusy(key);
@@ -77,6 +114,8 @@ export function GameDetail({ game, viewerId, staffCanManage, levels }: Props) {
     const ok = await act("Game updated", () =>
       updateGameAction(game.id, {
         matchType: String(f.get("matchType")),
+        joinPolicy: String(f.get("joinPolicy")),
+        levelPolicy: String(f.get("levelPolicy")),
         costMode,
         costPerPlayerCents: costMode === "FIXED_PER_PLAYER" ? Math.round(Number(f.get("costPerPlayer") || 0) * 100) : null,
         description: String(f.get("description") ?? ""),
@@ -160,6 +199,65 @@ export function GameDetail({ game, viewerId, staffCanManage, levels }: Props) {
         </Card>
       )}
 
+      {openRequest && (
+        <Card variant="glass" padding="md">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-h4">
+                {openRequest.kind === "PAIR" ? "Your pair asked to join" : "You asked to join"} <RequestStatusBadge status={openRequest.status} />
+              </div>
+              <p className="mt-1 text-body-sm text-fg-muted">{openRequest.status === "WAITLISTED" ? "The game is full right now. You move back to pending if a spot opens." : "The organizer reviews your level and profile and decides. You will be notified."}</p>
+            </div>
+            <Button size="sm" variant="secondary" loading={busy === "withdraw"} onClick={() => act("Request withdrawn", () => withdrawRequestAction(openRequest.id), "withdraw")}>
+              Withdraw
+            </Button>
+          </div>
+          <MatchReasons reasons={openRequest.reasons} compact className="mt-3" />
+        </Card>
+      )}
+      {myRequest && !openRequest && myRequest.status !== "ACCEPTED" && !me && (
+        <Alert tone={myRequest.status === "DECLINED" ? "warning" : "info"} title={`Your request was ${myRequest.status.toLowerCase()}`}>
+          {myRequest.decisionNote ? `Organizer: ${myRequest.decisionNote}` : myRequest.status === "EXPIRED" ? "The game started or the request timed out." : "You can ask again if a spot is still open."}
+        </Alert>
+      )}
+      {showAsk && (compat.solo || compat.pair) && (
+        <Card variant="glass" padding="md">
+          {canAskSolo || canAskPair ? (
+            <>
+              <div className="text-h4">{compat.solo?.waitlist && !compat.solo.eligible ? "Game is full. Join the waitlist?" : "Ask to join this game"}</div>
+              <p className="mt-1 text-body-sm text-fg-muted">The organizer sees your official level, profile and these reasons, then accepts or declines. Nobody is added automatically.</p>
+              <MatchReasons reasons={(compat.solo?.eligible || compat.solo?.waitlist ? compat.solo : compat.pair)!.reasons} compact className="mt-3" />
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {canAskSolo && (
+                  <Button leftIcon={<Send />} onClick={() => setAsk("SOLO")}>
+                    {compat.solo!.eligible ? "Request 1 spot" : "Join waitlist"}
+                  </Button>
+                )}
+                {canAskPair && (
+                  <Button variant={canAskSolo ? "secondary" : "primary"} leftIcon={<Users />} onClick={() => setAsk("PAIR")}>
+                    {compat.pair!.eligible ? "Request both spots as a pair" : "Waitlist as a pair"}
+                  </Button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-h4">Not a match for you</div>
+              <ul className="mt-1 list-disc pl-5 text-body-sm text-fg-muted">
+                {[...new Set([...(compat.solo?.blockers ?? []), ...(game.joinPolicy === "PAIRS_ONLY" ? (compat.pair?.blockers ?? []) : [])])].slice(0, 3).map((b) => (
+                  <li key={b}>{b}</li>
+                ))}
+              </ul>
+              {game.joinPolicy === "PAIRS_ONLY" && pairs.length === 0 && (
+                <Button size="sm" variant="secondary" className="mt-3" href="/app/play/pairs">
+                  Create a pair
+                </Button>
+              )}
+            </>
+          )}
+        </Card>
+      )}
+
       {game.status === "CANCELLED" && (
         <Alert tone="danger" title="This game was cancelled">
           {game.cancelReason ?? "No reason recorded."}
@@ -221,11 +319,40 @@ export function GameDetail({ game, viewerId, staffCanManage, levels }: Props) {
                 disabled={busy === "requests"}
                 onChange={(v) => act(v ? "Spots opened to requests" : "Requests closed", () => updateGameAction(game.id, { openToRequests: v }), "requests")}
                 label="Open remaining spots"
-                description="Players may ask to join; you approve each one. Join requests arrive in the next release."
+                description={game.joinPolicy === "PAIRS_ONLY" ? "Opposing pairs can request both spots; you approve the challenge." : "Compatible players ask for a spot; you approve each one."}
               />
             </Card>
           )}
         </section>
+      )}
+
+      {requests && (openRequests.length > 0 || decidedRequests.length > 0) && (
+        <section>
+          <SectionHeader eyebrow={organizer ? "Decide who joins" : "Requests"} title={openRequests.length ? `${openRequests.length} request${openRequests.length === 1 ? "" : "s"} waiting` : "Requests"} />
+          <div className="space-y-3">
+            {openRequests.map((r) => (
+              <RequestReviewCard key={r.id} request={r} levels={levels} spotsLeft={game.spotsLeft} onDecide={organizer ? decide : async () => false} busy={busy === `req-${r.id}`} />
+            ))}
+            {decidedRequests.length > 0 && (
+              <details className="text-caption text-fg-subtle">
+                <summary className="cursor-pointer py-1">{decidedRequests.length} earlier request{decidedRequests.length === 1 ? "" : "s"}</summary>
+                <ul className="mt-1 space-y-1">
+                  {decidedRequests.map((r) => (
+                    <li key={r.id} className="flex items-center justify-between">
+                      <span>{r.members.map((m) => m.name).join(" & ")}</span>
+                      <RequestStatusBadge status={r.status} />
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        </section>
+      )}
+      {organizer && live && game.openToRequests && openRequests.length === 0 && (
+        <Card variant="outline" padding="sm" className="flex items-center gap-3 text-caption text-fg-subtle">
+          <Inbox size={16} /> Open to requests: compatible players at Level {game.levels.length ? game.levels.join("/") : "any"} can ask to join. You decide each one.
+        </Card>
       )}
 
       {!organizer && staffCanManage && live && (
@@ -262,6 +389,13 @@ export function GameDetail({ game, viewerId, staffCanManage, levels }: Props) {
               {game.openToRequests ? " · open to requests" : ""}
             </span>
           </li>
+          <li className="flex items-center gap-3 py-2.5">
+            <Users size={16} className="text-blue-300" /> <span className="text-fg-muted">Who can ask</span>
+            <span className="ml-auto text-right font-semibold">
+              {GAME_JOIN_POLICIES.find((j) => j.value === game.joinPolicy)?.label}
+              <span className="block text-caption font-normal text-fg-subtle">{GAME_LEVEL_POLICIES.find((l) => l.value === game.levelPolicy)?.label}</span>
+            </span>
+          </li>
         </ul>
       </Card>
 
@@ -277,7 +411,10 @@ export function GameDetail({ game, viewerId, staffCanManage, levels }: Props) {
                     <span className="truncate text-body-sm font-bold">{p.user.name}</span>
                     {p.user.playerProfile?.level && <LevelBadge level={p.user.playerProfile.level as PlayerLevel} size="sm" label={levels[p.user.playerProfile.level]} />}
                   </div>
-                  <div className="text-caption capitalize text-fg-muted">{p.role === "ORGANIZER" ? "Organizer" : p.user.playerProfile?.side ? `${p.user.playerProfile.side.toLowerCase()} side` : "Player"}</div>
+                  <div className="text-caption capitalize text-fg-muted">
+                    {p.role === "ORGANIZER" ? "Organizer" : p.user.playerProfile?.side ? `${p.user.playerProfile.side.toLowerCase()} side` : "Player"}
+                    {p.pairId && <span className="normal-case text-blue-300"> · {teamLabel(p.pairId)}</span>}
+                  </div>
                 </div>
                 <Badge size="sm" tone={PARTICIPANT_TONE[p.status]}>
                   {PARTICIPANT_LABEL[p.status]}
@@ -363,6 +500,8 @@ export function GameDetail({ game, viewerId, staffCanManage, levels }: Props) {
             </Field>
           )}
           <Field label="Game type">{(id) => <Select id={id} name="matchType" defaultValue={game.matchType} options={MATCH_TYPES.map((m) => ({ value: m.value, label: m.label }))} />}</Field>
+          <Field label="Who can ask to join" hint={game.pairId ? "Your game is set up as a pair; a challenge takes an opposing pair." : undefined}>{(id) => <Select id={id} name="joinPolicy" defaultValue={game.joinPolicy} options={GAME_JOIN_POLICIES.filter((j) => game.pairId || j.value !== "PAIRS_ONLY").map((j) => ({ value: j.value, label: j.label }))} />}</Field>
+          <Field label="Levels" hint="Adjacent levels only apply when the academy allows them.">{(id) => <Select id={id} name="levelPolicy" defaultValue={game.levelPolicy} options={GAME_LEVEL_POLICIES.map((l) => ({ value: l.value, label: l.label }))} />}</Field>
           <Field label="Cost">{(id) => <Select id={id} name="costMode" defaultValue={game.costMode} options={GAME_COST_MODES.map((c) => ({ value: c.value, label: c.label }))} />}</Field>
           <Field label="Amount per player (EGP), for fixed cost">{(id) => <Input id={id} name="costPerPlayer" type="number" min={0} step={10} defaultValue={game.costPerPlayerCents ? game.costPerPlayerCents / 100 : ""} />}</Field>
           <Field label="Title or description">{(id) => <Input id={id} name="description" maxLength={500} defaultValue={game.description ?? ""} />}</Field>
@@ -438,6 +577,27 @@ export function GameDetail({ game, viewerId, staffCanManage, levels }: Props) {
           </div>
         </form>
       </Modal>
+      <RequestModal open={!!ask} kind={ask ?? "SOLO"} pairs={pairs} pairId={askPair} onPair={setAskPair} onClose={() => setAsk(null)} onSubmit={sendRequest} busy={busy === "request"} reasons={(ask === "PAIR" ? compat.pair : compat.solo)?.reasons ?? []} />
     </div>
+  );
+}
+
+export function RequestModal({ open, kind, pairs, pairId, onPair, onClose, onSubmit, busy, reasons }: { open: boolean; kind: "SOLO" | "PAIR"; pairs: { id: string; label: string }[]; pairId: string; onPair: (id: string) => void; onClose: () => void; onSubmit: (e: React.FormEvent<HTMLFormElement>) => void; busy: boolean; reasons: MatchResult["reasons"] }) {
+  return (
+    <Modal open={open} onClose={onClose} title={kind === "PAIR" ? "Request both spots as a pair" : "Request to join"} description="The organizer sees your level, profile and these reasons before deciding." size="sm">
+      <form onSubmit={onSubmit} className="space-y-4 pb-2">
+        <MatchReasons reasons={reasons} />
+        {kind === "PAIR" && <Field label="Pair">{(id) => <Select id={id} value={pairId} onChange={(e) => onPair(e.target.value)} options={pairs.map((p) => ({ value: p.id, label: p.label }))} />}</Field>}
+        <Field label="Message to the organizer (optional)">{(id) => <Textarea id={id} name="message" maxLength={300} placeholder="Left side, steady, happy to split the court" />}</Field>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={busy}>
+            Send request
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }

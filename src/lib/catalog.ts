@@ -93,6 +93,26 @@ export const GAME_COST_MODES = [
 ] as const;
 export const gameCostLabel = (value: string) => GAME_COST_MODES.find((c) => c.value === value)?.label ?? value;
 
+export const GAME_JOIN_POLICIES = [
+  { value: "OPEN", label: "Solo players and pairs", hint: "Anyone compatible can ask for a spot" },
+  { value: "SOLO_ONLY", label: "Solo players only", hint: "One spot per request" },
+  { value: "PAIRS_ONLY", label: "Pairs only (challenge)", hint: "An opposing pair takes both spots" },
+] as const;
+
+export const GAME_LEVEL_POLICIES = [
+  { value: "EXACT", label: "Exact levels only", hint: "Only the levels you pick" },
+  { value: "ADJACENT", label: "Adjacent levels welcome", hint: "One rank above or below, when the academy allows it" },
+] as const;
+
+export const REQUEST_STATUSES = [
+  { value: "PENDING", label: "Pending" },
+  { value: "WAITLISTED", label: "Waitlisted" },
+  { value: "ACCEPTED", label: "Accepted" },
+  { value: "DECLINED", label: "Declined" },
+  { value: "WITHDRAWN", label: "Withdrawn" },
+  { value: "EXPIRED", label: "Expired" },
+] as const;
+
 export const GAME_STATUSES = [
   { value: "DRAFT", label: "Draft" },
   { value: "OPEN", label: "Open" },

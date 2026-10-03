@@ -17,13 +17,13 @@ import { EmptyState } from "@/components/ui/states";
 import { useToast } from "@/components/ui/toast";
 import { money } from "@/components/patterns/booking-status";
 import { PlayerPicker, type PickedPlayer } from "@/components/patterns/player-picker";
-import { GAME_COST_MODES, GAME_FORMATS, GAME_VISIBILITY, MATCH_TYPES } from "@/lib/catalog";
+import { GAME_COST_MODES, GAME_FORMATS, GAME_JOIN_POLICIES, GAME_LEVEL_POLICIES, GAME_VISIBILITY, MATCH_TYPES } from "@/lib/catalog";
 import { formatInZone } from "@/lib/time";
 import { createGameAction } from "@/server/actions/game-sessions";
 
 type BookingOption = { id: string; code: string; startsAt: string; endsAt: string; timezone: string; location: string; court: string; priceCents: number; currency: string; durationMinutes: number };
 
-export function NewGameForm({ bookings, preselect, levels }: { bookings: BookingOption[]; preselect: string | null; levels: { level: PlayerLevel; label: string }[] }) {
+export function NewGameForm({ bookings, preselect, levels, pairs }: { bookings: BookingOption[]; preselect: string | null; levels: { level: PlayerLevel; label: string }[]; pairs: { id: string; label: string; partnerId: string }[] }) {
   const router = useRouter();
   const { toast } = useToast();
   const [bookingId, setBookingId] = useState<string | null>(bookings.find((b) => b.id === preselect)?.id ?? (bookings.length === 1 ? bookings[0].id : null));
@@ -33,6 +33,9 @@ export function NewGameForm({ bookings, preselect, levels }: { bookings: Booking
   const [matchType, setMatchType] = useState("ANY");
   const [visibility, setVisibility] = useState<"PRIVATE" | "PUBLIC">("PRIVATE");
   const [openToRequests, setOpenToRequests] = useState(false);
+  const [pairId, setPairId] = useState<string>("");
+  const [joinPolicy, setJoinPolicy] = useState<"OPEN" | "SOLO_ONLY" | "PAIRS_ONLY">("OPEN");
+  const [levelPolicy, setLevelPolicy] = useState<"EXACT" | "ADJACENT">("EXACT");
   const [costMode, setCostMode] = useState("SPLIT_EVENLY");
   const [costPerPlayer, setCostPerPlayer] = useState("");
   const [invites, setInvites] = useState<PickedPlayer[]>([]);
@@ -58,6 +61,9 @@ export function NewGameForm({ bookings, preselect, levels }: { bookings: Booking
       matchType,
       visibility,
       openToRequests,
+      joinPolicy,
+      levelPolicy,
+      pairId: pairId || undefined,
       costMode,
       costPerPlayerCents: costMode === "FIXED_PER_PLAYER" ? Math.round(Number(costPerPlayer || 0) * 100) : null,
       description: String(f.get("description") ?? ""),
@@ -162,8 +168,23 @@ export function NewGameForm({ bookings, preselect, levels }: { bookings: Booking
             )}
           </Field>
           <Field label="Game type">{(id) => <Select id={id} value={matchType} onChange={(e) => setMatchType(e.target.value)} options={MATCH_TYPES.map((m) => ({ value: m.value, label: m.label }))} />}</Field>
+          {pairs.length > 0 && format !== "SINGLES" && (
+            <Field label="Play as a pair" hint={pairId ? "Your partner is invited and takes one of the spots. Choose 'Pairs only' below to open a challenge." : "Optional: enter the game with a confirmed partner."}>
+              {(id) => (
+                <Select
+                  id={id}
+                  value={pairId}
+                  onChange={(e) => {
+                    setPairId(e.target.value);
+                    if (!e.target.value && joinPolicy === "PAIRS_ONLY") setJoinPolicy("OPEN");
+                  }}
+                  options={[{ value: "", label: "Solo (just me)" }, ...pairs.map((p) => ({ value: p.id, label: p.label }))]}
+                />
+              )}
+            </Field>
+          )}
           <Field label="Invite players" hint="They must accept the invitation themselves; nobody is added automatically.">
-            {() => <PlayerPicker value={invites} onChange={setInvites} max={players - 1} />}
+            {() => <PlayerPicker value={invites} onChange={setInvites} max={players - 1 - (pairId ? 1 : 0)} exclude={pairId ? [pairs.find((p) => p.id === pairId)!.partnerId] : []} />}
           </Field>
         </section>
 
@@ -172,7 +193,17 @@ export function NewGameForm({ bookings, preselect, levels }: { bookings: Booking
           <Field label="Visibility" hint={GAME_VISIBILITY.find((v) => v.value === visibility)?.hint}>
             {() => <Tabs variant="pill" fullWidth value={visibility} onChange={setVisibility} items={GAME_VISIBILITY.map((v) => ({ value: v.value, label: v.label }))} />}
           </Field>
-          <Switch checked={openToRequests} onChange={setOpenToRequests} label="Open remaining spots" description="Players who are not invited may ask to join. You decide who gets in." />
+          <Switch checked={openToRequests} onChange={setOpenToRequests} label="Open remaining spots" description="Compatible players who are not invited may ask to join. You decide who gets in." />
+          {openToRequests && (
+            <>
+              <Field label="Who can ask" hint={GAME_JOIN_POLICIES.find((j) => j.value === joinPolicy)?.hint}>
+                {(id) => <Select id={id} value={joinPolicy} onChange={(e) => setJoinPolicy(e.target.value as typeof joinPolicy)} options={GAME_JOIN_POLICIES.filter((j) => pairId || j.value !== "PAIRS_ONLY").map((j) => ({ value: j.value, label: j.label }))} />}
+              </Field>
+              <Field label="Levels" hint={GAME_LEVEL_POLICIES.find((l) => l.value === levelPolicy)?.hint}>
+                {(id) => <Select id={id} value={levelPolicy} onChange={(e) => setLevelPolicy(e.target.value as typeof levelPolicy)} options={GAME_LEVEL_POLICIES.map((l) => ({ value: l.value, label: l.label }))} />}
+              </Field>
+            </>
+          )}
         </section>
 
         <section className="space-y-4">
