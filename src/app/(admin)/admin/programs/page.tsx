@@ -1,62 +1,43 @@
-import { Plus } from "lucide-react";
-import { AdminShell } from "@/components/nav/admin-nav";
-import { Button } from "@/components/ui/button";
-import { Badge, LevelBadge } from "@/components/ui/badge";
-import { ProgressBar } from "@/components/ui/misc";
-import { TBody, TD, TH, THead, TR, Table, TableWrap } from "@/components/ui/table";
-import { byId, locationBySlug, money, programs, trainers } from "@/data/mock";
+import { requireStaffOrRedirect } from "@/lib/auth/cookies";
+import { accessibleLocationIds } from "@/lib/auth/authorize";
+import { listPrograms, listProgramEnrollments } from "@/server/services/programs";
+import { listTrainersInScope } from "@/server/services/trainers";
+import { listManagedLocations } from "@/server/services/locations";
+import { listCourts } from "@/server/services/courts";
+import { listUsers } from "@/server/services/users";
+import { getLevelDefinitions } from "@/server/services/levels";
+import { ProgramsAdmin } from "./programs-admin";
 
-export default function AdminPrograms() {
+export const dynamic = "force-dynamic";
+
+export default async function AdminProgramsPage({ searchParams }: { searchParams: Promise<{ program?: string }> }) {
+  const actor = await requireStaffOrRedirect();
+  const sp = await searchParams;
+  const manage = await accessibleLocationIds(actor, "program.manage");
+  const canManage = manage === "all" || manage.length > 0;
+  const [programs, trainers, locations, levels] = await Promise.all([
+    canManage ? listPrograms(actor, { includeAll: true }) : listPrograms(actor),
+    listTrainersInScope(actor).catch(() => []),
+    listManagedLocations(actor),
+    getLevelDefinitions(),
+  ]);
+  const manageable = locations.filter((l) => manage === "all" || manage.includes(l.id));
+  const courts = Object.fromEntries(await Promise.all(manageable.map(async (l) => [l.id, (await listCourts(actor, l.id)).filter((c) => c.status !== "INACTIVE").map((c) => ({ id: c.id, name: c.name }))] as const)));
+  const members = canManage ? await listUsers(actor, { pageSize: 200 }).then((r) => r.items.map((u) => ({ id: u.id, name: u.name, email: u.email }))).catch(() => []) : [];
+  const selected = sp.program ? programs.find((p) => p.id === sp.program) ?? null : null;
+  const roster = selected ? await listProgramEnrollments(actor, selected.id).catch(() => []) : [];
   return (
-    <AdminShell title="Programs" breadcrumb={["People", "Programs"]} actions={<Button leftIcon={<Plus />}>Create program</Button>}>
-      <TableWrap>
-        <Table>
-          <THead>
-            <TR>
-              <TH>Program</TH>
-              <TH>Levels</TH>
-              <TH>Coach · club</TH>
-              <TH>Starts</TH>
-              <TH className="min-w-48">Enrolment</TH>
-              <TH className="text-right">Price</TH>
-              <TH>Tag</TH>
-            </TR>
-          </THead>
-          <TBody>
-            {programs.map((p) => {
-              const enrolled = p.capacity - p.spotsLeft;
-              return (
-                <TR key={p.id} interactive>
-                  <TD>
-                    <div className="font-semibold">{p.name}</div>
-                    <div className="text-caption text-fg-subtle">
-                      {p.weeks} wks · {p.sessionsPerWeek}×/wk
-                    </div>
-                  </TD>
-                  <TD>
-                    <div className="flex gap-1">
-                      {p.levels.map((l) => (
-                        <LevelBadge key={l} level={l} size="sm" />
-                      ))}
-                    </div>
-                  </TD>
-                  <TD className="text-fg-muted">
-                    {byId(trainers, p.trainerId)?.name.replace("Coach ", "")} · {locationBySlug(p.locationSlug)?.name.replace("HITTERS ", "")}
-                  </TD>
-                  <TD>{p.startDate}</TD>
-                  <TD>
-                    <ProgressBar value={enrolled} max={p.capacity} label={`${enrolled}/${p.capacity}`} tone={p.spotsLeft <= 1 ? "volt" : "brand"} />
-                  </TD>
-                  <TD numeric className="font-semibold">
-                    {money(p.price)}
-                  </TD>
-                  <TD>{p.tag && <Badge tone={p.tag === "Last spots" ? "warning" : p.tag === "New" ? "volt" : "brand"}>{p.tag}</Badge>}</TD>
-                </TR>
-              );
-            })}
-          </TBody>
-        </Table>
-      </TableWrap>
-    </AdminShell>
+    <ProgramsAdmin
+      programs={programs}
+      trainers={trainers.map((t) => ({ id: t.id, name: t.user.name, locationIds: t.locations.map((l) => l.location.id) }))}
+      locations={manageable.map((l) => ({ id: l.id, name: l.name, timezone: l.timezone }))}
+      courts={courts}
+      levels={levels.map((l) => ({ level: l.level, label: l.label }))}
+      members={members}
+      canManage={canManage}
+      selectedId={selected?.id ?? null}
+      roster={roster}
+      viewerId={actor.id}
+    />
   );
 }

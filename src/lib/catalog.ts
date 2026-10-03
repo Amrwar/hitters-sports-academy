@@ -123,6 +123,27 @@ export const GAME_STATUSES = [
   { value: "CANCELLED", label: "Cancelled" },
 ] as const;
 
+export const PROGRAM_CATEGORIES = [
+  { value: "BEGINNER", label: "Beginner" },
+  { value: "INTERMEDIATE", label: "Intermediate" },
+  { value: "ADVANCED", label: "Advanced" },
+  { value: "JUNIOR", label: "Junior" },
+  { value: "COMPETITIVE", label: "Competitive" },
+  { value: "INTENSIVE", label: "Intensive" },
+  { value: "GROUP_COACHING", label: "Group coaching" },
+] as const;
+export const programCategoryLabel = (v: string) => PROGRAM_CATEGORIES.find((c) => c.value === v)?.label ?? v;
+
+export const TRAINER_SPECIALTIES = ["Technique", "Match tactics", "Footwork", "Serve and return", "Net game", "Bandeja and vibora", "Fitness", "Juniors", "Beginners", "Competition prep", "Mental game"] as const;
+export const TRAINER_LANGUAGES = ["Arabic", "English", "Spanish", "French", "Italian", "German"] as const;
+
+export const ATTENDANCE_STATUSES = [
+  { value: "PRESENT", label: "Present" },
+  { value: "LATE", label: "Late" },
+  { value: "ABSENT", label: "Absent" },
+  { value: "EXCUSED", label: "Excused" },
+] as const;
+
 export const DURATION_OPTIONS = [30, 60, 90, 120, 150, 180] as const;
 
 export const TIMEZONES = ["Africa/Cairo", "Asia/Dubai", "Asia/Riyadh", "Europe/Madrid", "Europe/London", "America/New_York"] as const;

@@ -3,13 +3,16 @@ import { Button } from "@/components/ui/button";
 import { Card, SectionHeader } from "@/components/ui/card";
 import { Badge, LevelBadge } from "@/components/ui/badge";
 import { StatTile } from "@/components/ui/misc";
-import { ProgramCard, QuickAction } from "@/components/patterns/cards";
+import { QuickAction } from "@/components/patterns/cards";
+import { LessonRow, ProgramCard } from "@/components/patterns/academy";
 import { BookingRow } from "@/components/patterns/booking-row";
 import { GameCard } from "@/components/patterns/game-card";
-import { programs } from "@/data/mock";
 import { listMyBookings } from "@/server/services/bookings";
 import { listMyGames } from "@/server/services/game-sessions";
 import { findMatches } from "@/server/services/matchmaking";
+import { listPrograms } from "@/server/services/programs";
+import { listMyLessons } from "@/server/services/lessons";
+import { getLevelDefinitions } from "@/server/services/levels";
 import { MatchReasons, MatchStrength } from "@/components/patterns/match-reasons";
 import { formatInZone } from "@/lib/time";
 import { requireActorOrRedirect } from "@/lib/auth/cookies";
@@ -22,8 +25,10 @@ function greeting() {
 
 export default async function PlayerDashboard() {
   const actor = await requireActorOrRedirect("/app");
-  const [profile, upcoming, myGames, found] = await Promise.all([getMyProfile(actor), listMyBookings(actor, "upcoming"), listMyGames(actor, "upcoming"), findMatches(actor, { take: 2 }).catch(() => null)]);
+  const [profile, upcoming, myGames, found, programs, lessons, levelDefs] = await Promise.all([getMyProfile(actor), listMyBookings(actor, "upcoming"), listMyGames(actor, "upcoming"), findMatches(actor, { take: 2 }).catch(() => null), listPrograms(actor), listMyLessons(actor, "upcoming"), getLevelDefinitions()]);
   const recommended = found?.items ?? [];
+  const levelLabels = Object.fromEntries(levelDefs.map((l) => [l.level, l.label]));
+  const recommendedProgram = programs.find((p) => p.status === "OPEN" && (p.levels.length === 0 || (profile.level ? p.levels.includes(profile.level) : false))) ?? programs[0] ?? null;
   // Programs are still sample data until the academy phase ships.
   const next = upcoming[0];
   const live = myGames.find((g) => g.status === "IN_PROGRESS") ?? null;
@@ -86,8 +91,8 @@ export default async function PlayerDashboard() {
       <div className="grid grid-cols-2 gap-3">
         <QuickAction href="/app/book" icon={<CalendarPlus />} label="Book a court" hint={upcoming.length ? upcoming.length + " upcoming" : "From EGP 400/h"} />
         <QuickAction href="/app/play" icon={<Swords />} label="Play" hint={invitations.length ? `${invitations.length} invitation${invitations.length === 1 ? "" : "s"}` : recommended.length ? `${recommended.length} match${recommended.length === 1 ? "" : "es"} for you` : "Find a match"} />
-        <QuickAction href="/app/trainers" icon={<UserSquare2 />} label="Private coach" hint="Certified trainers" />
-        <QuickAction href="/app/programs" icon={<GraduationCap />} label="Programs" hint="New intake Oct" />
+        <QuickAction href="/app/trainers" icon={<UserSquare2 />} label="Private coach" hint={lessons.length ? `${lessons.length} lesson${lessons.length === 1 ? "" : "s"} booked` : "Book a coach"} />
+        <QuickAction href="/app/programs" icon={<GraduationCap />} label="Programs" hint={programs.length ? `${programs.length} open` : "Academy"} />
       </div>
 
       {live && (
@@ -181,10 +186,18 @@ export default async function PlayerDashboard() {
         )}
       </section>
 
-      <section>
-        <SectionHeader eyebrow="Academy" title={`Recommended${profile.level ? ` for Level ${profile.level}` : ""}`} />
-        <ProgramCard program={programs[profile.level === "A" ? 2 : profile.level === "B" ? 1 : 0]} />
-      </section>
+      {lessons.length > 0 && (
+        <section>
+          <SectionHeader eyebrow="Coaching" title="Next lesson" action={<Button variant="link" size="sm" href="/app/lessons" rightIcon={<ArrowRight />}>All lessons</Button>} />
+          <LessonRow lesson={lessons[0]} href={`/app/lessons/${lessons[0].id}`} viewer="player" />
+        </section>
+      )}
+      {recommendedProgram && (
+        <section>
+          <SectionHeader eyebrow="Academy" title={`Recommended${profile.level ? ` for Level ${profile.level}` : ""}`} action={<Button variant="link" size="sm" href="/app/programs" rightIcon={<ArrowRight />}>Programs</Button>} />
+          <ProgramCard program={recommendedProgram} levelLabels={levelLabels} href={`/app/programs/${recommendedProgram.code}`} />
+        </section>
+      )}
     </div>
   );
 }

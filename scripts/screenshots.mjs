@@ -143,7 +143,24 @@ try {
   await go(page, "/app/play/new");
   await shot(page, "player-game-new", "Organize a game: pick a booking, format, levels, invitations, visibility and cost.", { viewport: "phone", fullPage: true });
   await go(page, "/app/programs");
-  await shot(page, "player-programs", "Academy programs (sample data until the academy phase).", { viewport: "phone" });
+  await shot(page, "player-programs", "Academy: private coaching and packages, my programs, open programs for my level.", { viewport: "phone", fullPage: true });
+  await go(page, "/app/programs/PR-SEED01");
+  await shot(page, "player-program-detail", "Program: dates, schedule, group size, rules, coach, every session with my attendance, enroll or waitlist.", { viewport: "phone", fullPage: true });
+  await go(page, "/app/trainers");
+  await shot(page, "player-trainers", "Coaches filtered by club and level, with specialties and hourly rate.", { viewport: "phone" });
+  const trainerHref = await page.$eval('a[href^="/app/trainers/"]', (a) => a.getAttribute("href"));
+  await go(page, trainerHref);
+  await page.waitForFunction(() => /\d\d:\d\d/.test(document.body.innerText) || document.body.innerText.includes("No free times"), { timeout: 30_000 }).catch(() => undefined);
+  await shot(page, "player-trainer-detail", "Coach profile: bio, qualifications, languages, levels, availability picker and lesson booking with package credits.", { viewport: "phone", fullPage: true });
+  await go(page, "/app/lessons");
+  await shot(page, "player-lessons", "My lessons: upcoming and history.", { viewport: "phone" });
+  const lessonHref = await page.$eval('a[href^="/app/lessons/"]', (a) => a.getAttribute("href")).catch(() => null);
+  if (lessonHref) {
+    await go(page, lessonHref);
+    await shot(page, "player-lesson-detail", "Lesson: time, coach, price or credit, free-change window, reschedule and cancel, shared coach notes.", { viewport: "phone", fullPage: true });
+  }
+  await go(page, "/app/packages");
+  await shot(page, "player-packages", "Packages: credits left, expiry, catalogue, lesson history.", { viewport: "phone", fullPage: true });
   await logout(page);
   await page.close();
 
@@ -186,6 +203,27 @@ try {
   await shot(page, "admin-games", "Games across the staff member's locations: lineup, levels, cost, status, cancel.", { viewport: "desktop" });
   await go(page, "/admin/settings");
   await shot(page, "admin-settings", "Academy settings: matchmaking rules (adjacent levels, request expiry, open-request cap) and the scoring table.", { viewport: "desktop" });
+  await go(page, "/admin/trainers");
+  await shot(page, "admin-trainers", "Trainer profiles: clubs, levels, specialties, rate, booking mode, status.", { viewport: "desktop" });
+  await go(page, "/admin/programs");
+  const programId = await page.evaluate(() => { const b = [...document.querySelectorAll("button")].find((x) => x.textContent.trim() === "Roster"); b?.click(); return true; });
+  void programId;
+  await sleep(1500);
+  await shot(page, "admin-programs", "Programs: schedule, enrollment progress, status, roster with waitlist, attendance and payments.", { viewport: "desktop", fullPage: true });
+  await go(page, "/admin/packages");
+  await shot(page, "admin-packages", "Packages: catalogue and member purchases with credits, expiry and payments.", { viewport: "desktop" });
+  await page.close();
+
+  /* ------------------------------------------------------------------ Trainer workspace (desktop) */
+  page = await browser.newPage();
+  await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1.5 });
+  await login(page, "coach.ahmed@hitters.academy");
+  await go(page, "/admin/coaching");
+  await shot(page, "admin-coaching", "Trainer workspace: upcoming lessons and requests with accept, attendance and notes.", { viewport: "desktop" });
+  await go(page, "/admin/coaching?tab=availability");
+  await shot(page, "admin-coaching-availability", "Weekly coaching hours per club, auto-confirm switch and time off.", { viewport: "desktop" });
+  await go(page, "/admin/coaching?tab=students");
+  await shot(page, "admin-coaching-students", "Assigned students with lessons, last and next session, programs and progress notes.", { viewport: "desktop" });
   await page.close();
 } finally {
   await browser.close();

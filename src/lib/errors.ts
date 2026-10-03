@@ -16,7 +16,9 @@ export type ErrorCode =
   // Game sessions
   | "SESSION_FULL"
   | "INVALID_TRANSITION"
-  | "NOT_ELIGIBLE";
+  | "NOT_ELIGIBLE"
+  | "PROGRAM_FULL"
+  | "NO_CREDITS";
 
 const STATUS: Record<ErrorCode, number> = {
   UNAUTHENTICATED: 401,
@@ -35,6 +37,8 @@ const STATUS: Record<ErrorCode, number> = {
   SESSION_FULL: 409,
   INVALID_TRANSITION: 409,
   NOT_ELIGIBLE: 409,
+  PROGRAM_FULL: 409,
+  NO_CREDITS: 409,
 };
 
 /** Domain error carried from services to actions and route handlers. */

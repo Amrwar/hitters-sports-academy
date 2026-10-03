@@ -213,6 +213,74 @@ async function main() {
   void pairAmrKarim;
   console.log("matchmaking: done");
 
+  // Academy demo: coaching profiles, weekly availability, a lesson, two programs, packages and a purchase.
+  const ensureTrainer = async (email: string, data: Omit<Prisma.TrainerProfileUncheckedCreateInput, "userId">, slugs: string[], hours: { dayOfWeek: number; startMinutes: number; endMinutes: number }[]) => {
+    const userId = userIds.get(email)!;
+    const t = await db.trainerProfile.upsert({ where: { userId }, create: { userId, ...data }, update: {} });
+    for (const slug of slugs) await db.trainerLocation.upsert({ where: { trainerId_locationId: { trainerId: t.id, locationId: locationIds.get(slug)! } }, create: { trainerId: t.id, locationId: locationIds.get(slug)! }, update: {} });
+    if ((await db.trainerAvailability.count({ where: { trainerId: t.id } })) === 0) {
+      await db.trainerAvailability.createMany({ data: hours.map((h) => ({ trainerId: t.id, locationId: locationIds.get(slugs[0])!, ...h })) });
+    }
+    return t;
+  };
+  const ahmed = await ensureTrainer(
+    "coach.ahmed@hitters.academy",
+    { title: "Head coach · FIP Level 2", bio: "12 years on the professional circuit in Spain. Builds complete players from footwork up, with a soft spot for the bandeja.", qualifications: ["FIP Level 2", "PTR Padel Professional"], languages: ["Arabic", "English", "Spanish"], specialties: ["Technique", "Match tactics", "Competition prep"], levels: ["A", "B"], hourlyRateCents: 90000, durationsMinutes: [60, 90], autoConfirm: true, yearsExperience: 12 },
+    ["new-cairo", "maadi"],
+    [1, 2, 3, 4].map((dayOfWeek) => ({ dayOfWeek, startMinutes: 16 * 60, endMinutes: 21 * 60 })).concat([{ dayOfWeek: 6, startMinutes: 9 * 60, endMinutes: 13 * 60 }]),
+  );
+  // A second coach: the New Cairo assessor also coaches beginners on request.
+  await db.staffMembership.upsert({ where: { userId_locationId_role: { userId: userIds.get("assessor.newcairo@hitters.academy")!, locationId: locationIds.get("new-cairo")!, role: "TRAINER" } }, create: { userId: userIds.get("assessor.newcairo@hitters.academy")!, locationId: locationIds.get("new-cairo")!, role: "TRAINER" }, update: {} });
+  const aya = await ensureTrainer(
+    "assessor.newcairo@hitters.academy",
+    { title: "Academy coach · juniors and beginners", bio: "Former junior national player. Patient, structured sessions for new players and kids.", qualifications: ["FIP Level 1"], languages: ["Arabic", "English"], specialties: ["Beginners", "Juniors", "Footwork"], levels: [], hourlyRateCents: 60000, durationsMinutes: [60], autoConfirm: false, yearsExperience: 5 },
+    ["new-cairo"],
+    [0, 1, 2, 3].map((dayOfWeek) => ({ dayOfWeek, startMinutes: 9 * 60, endMinutes: 14 * 60 })),
+  );
+  const ensureLesson = async (code: string, trainer: { id: string; hourlyRateCents: number }, email: string, slug: string, daysAhead: number, hour: number, minutes: number, focus: string, status: "CONFIRMED" | "REQUESTED" = "CONFIRMED") => {
+    if (await db.lesson.findUnique({ where: { code } })) return;
+    const startsAt = zonedUtc(daysAhead, hour);
+    const endsAt = new Date(startsAt.getTime() + minutes * 60_000);
+    const priceCents = Math.round((trainer.hourlyRateCents * minutes) / 60);
+    await db.lesson.create({ data: { code, trainerId: trainer.id, playerId: userIds.get(email)!, locationId: locationIds.get(slug)!, startsAt, endsAt, durationMinutes: minutes, status, priceCents, focus, createdById: userIds.get(email)!, payments: { create: { amountCents: priceCents, status: "PENDING", method: "NONE" } } } });
+  };
+  // Amr's lesson lands on the next weekday evening inside Ahmed's hours (Mon-Thu 16:00-21:00 Cairo).
+  const nextWeekday = (() => { for (let d = 1; d < 8; d++) { const dt = new Date(); dt.setUTCDate(dt.getUTCDate() + d); const dow = dt.getUTCDay(); if (dow >= 1 && dow <= 4) return d; } return 1; })();
+  await ensureLesson("LS-SEED01", ahmed, "amr@example.com", "new-cairo", nextWeekday, 18, 60, "Bandeja depth and net positioning");
+  await ensureLesson("LS-SEED02", aya, "youssef@example.com", "new-cairo", nextWeekday + 1 <= 4 ? nextWeekday + 1 : nextWeekday, 10, 60, "First lesson: grip and serve", "REQUESTED");
+  const ensureProgram = async (code: string, data: Omit<Prisma.ProgramUncheckedCreateInput, "code" | "schedule"> & { schedule: { dayOfWeek: number; startMinutes: number; durationMinutes: number }[] }, enroll: string[]) => {
+    if (await db.program.findUnique({ where: { code } })) return;
+    const tz = "Africa/Cairo";
+    const sessions: { startsAt: Date; endsAt: Date }[] = [];
+    const start = new Date(data.startsOn as Date);
+    for (let i = 0; i < 120 && sessions.length < data.sessionsCount; i++) {
+      const day = new Date(start.getTime() + i * 86_400_000);
+      for (const s of data.schedule) {
+        if (day.getUTCDay() !== s.dayOfWeek || sessions.length >= data.sessionsCount) continue;
+        const startsAt = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), Math.floor(s.startMinutes / 60) - 2, s.startMinutes % 60));
+        sessions.push({ startsAt, endsAt: new Date(startsAt.getTime() + s.durationMinutes * 60_000) });
+      }
+    }
+    void tz;
+    const p = await db.program.create({ data: { code, ...data, schedule: data.schedule, sessions: { create: sessions.map((s, i) => ({ index: i + 1, startsAt: s.startsAt, endsAt: s.endsAt })) } } });
+    for (const email of enroll) {
+      const e = await db.programEnrollment.create({ data: { programId: p.id, playerId: userIds.get(email)!, status: "ENROLLED", enrolledAt: new Date(), createdById: userIds.get(email)! } });
+      await db.payment.create({ data: { enrollmentId: e.id, amountCents: data.priceCents, status: "PENDING", method: "NONE" } });
+    }
+  };
+  const inDays = (n: number) => { const d = new Date(); d.setUTCDate(d.getUTCDate() + n); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())); };
+  await ensureProgram("PR-SEED01", { name: "Intermediate Tuesdays", category: "INTERMEDIATE", description: "Six weeks of structured doubles work for Level B: positioning, lobs, bandeja and match play every Tuesday evening.", levels: ["B"], trainerId: ahmed.id, locationId: locationIds.get("new-cairo")!, startsOn: inDays(7), endsOn: inDays(60), schedule: [{ dayOfWeek: 2, startMinutes: 19 * 60, durationMinutes: 90 }], sessionsCount: 6, capacity: 8, priceCents: 360000, allowWaitlist: true, enrollmentRules: "Official Level B. Balls and court included.", cancellationRules: "Full refund up to 72 hours before the first session.", status: "OPEN", createdById: userIds.get("manager.newcairo@hitters.academy")! }, ["laila@example.com", "karim@example.com"]);
+  await ensureProgram("PR-SEED02", { name: "Junior Academy · Saturdays", category: "JUNIOR", description: "Ages 8 to 14. Fun, safe, progressive coaching with small groups and a tournament at the end.", levels: [], minAge: 8, maxAge: 14, trainerId: aya.id, locationId: locationIds.get("new-cairo")!, startsOn: inDays(5), endsOn: inDays(75), schedule: [{ dayOfWeek: 6, startMinutes: 10 * 60, durationMinutes: 60 }], sessionsCount: 10, capacity: 10, priceCents: 400000, allowWaitlist: true, status: "OPEN", createdById: userIds.get("manager.newcairo@hitters.academy")! }, []);
+  await ensureProgram("PR-SEED03", { name: "Competitive Edge", category: "COMPETITIVE", description: "Tournament preparation for Level A: tactics, pressure drills and match analysis.", levels: ["A"], trainerId: ahmed.id, locationId: locationIds.get("maadi")!, startsOn: inDays(10), endsOn: inDays(50), schedule: [{ dayOfWeek: 6, startMinutes: 11 * 60, durationMinutes: 120 }], sessionsCount: 4, capacity: 4, priceCents: 320000, allowWaitlist: true, status: "OPEN", createdById: userIds.get("manager.newcairo@hitters.academy")! }, ["omar@example.com", "salma@example.com"]);
+  const ensurePackage = async (name: string, data: Omit<Prisma.TrainingPackageUncheckedCreateInput, "name">) => (await db.trainingPackage.findFirst({ where: { name } })) ?? db.trainingPackage.create({ data: { name, ...data } });
+  const five = await ensurePackage("5 lessons", { description: "Five private lessons with any coach, valid 90 days.", credits: 5, priceCents: 400000, validityDays: 90 });
+  await ensurePackage("10 lessons", { description: "Ten private lessons with any coach, valid 180 days.", credits: 10, priceCents: 750000, validityDays: 180 });
+  await ensurePackage("Ahmed intensive 3", { description: "Three 90-minute sessions with Coach Ahmed at New Cairo.", credits: 3, priceCents: 360000, validityDays: 45, trainerId: ahmed.id, locationId: locationIds.get("new-cairo")! });
+  if (!(await db.packagePurchase.findUnique({ where: { code: "PK-SEED01" } }))) {
+    await db.packagePurchase.create({ data: { code: "PK-SEED01", playerId: userIds.get("amr@example.com")!, packageId: five.id, name: five.name, credits: 5, creditsUsed: 1, priceCents: five.priceCents, locationId: locationIds.get("new-cairo")!, expiresAt: new Date(Date.now() + 80 * 86_400_000), status: "ACTIVE", createdById: userIds.get("reception.newcairo@hitters.academy")!, payments: { create: { amountCents: five.priceCents, status: "PAID", method: "CARD", paidAt: new Date() } } } });
+  }
+  console.log("academy: done");
+
   console.log(`\nSeed complete. Sign in with any seeded email and the development password defined in prisma/seed.ts.`);
 }
 

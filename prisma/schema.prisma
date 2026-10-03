@@ -259,6 +259,72 @@ enum PairStatus {
   ACTIVE
 }
 
+// ---------------------------------------------------------------- Academy (coaching and programs)
+
+enum TrainerStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum LessonStatus {
+  REQUESTED
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum NoteVisibility {
+  PRIVATE
+  SHARED
+}
+
+enum ProgramCategory {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  JUNIOR
+  COMPETITIVE
+  INTENSIVE
+  GROUP_COACHING
+}
+
+enum ProgramStatus {
+  DRAFT
+  OPEN
+  FULL
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ProgramSessionStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum EnrollmentStatus {
+  ENROLLED
+  WAITLISTED
+  CANCELLED
+  COMPLETED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum PurchaseStatus {
+  ACTIVE
+  EXHAUSTED
+  EXPIRED
+  CANCELLED
+}
+
 // ---------------------------------------------------------------- Identity
 
 /// One account per person across all HITTERS locations.
@@ -300,6 +366,17 @@ model User {
   pairsAsA            Pair[]               @relation("PairPlayerA")
   pairsAsB            Pair[]               @relation("PairPlayerB")
   pairsCreated        Pair[]               @relation("PairCreatedBy")
+  trainerProfile      TrainerProfile?
+  lessonsTaken        Lesson[]             @relation("LessonPlayer")
+  lessonsCancelled    Lesson[]             @relation("LessonCancelledBy")
+  lessonsCreated      Lesson[]             @relation("LessonCreatedBy")
+  progressNotes       ProgressNote[]       @relation("NotePlayer")
+  enrollments         ProgramEnrollment[]  @relation("EnrollmentPlayer")
+  enrollmentsCreated  ProgramEnrollment[]  @relation("EnrollmentCreatedBy")
+  attendanceMarked    ProgramAttendance[]  @relation("AttendanceMarkedBy")
+  programsCreated     Program[]            @relation("ProgramCreatedBy")
+  purchases           PackagePurchase[]    @relation("PurchasePlayer")
+  purchasesCreated    PackagePurchase[]    @relation("PurchaseCreatedBy")
 
   @@index([status])
   @@index([globalRole])
@@ -486,19 +563,24 @@ model Location {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
-  courts             Court[]
-  bookings           Booking[]
-  gameSessions       GameSession[]
-  photos             LocationPhoto[]
-  bookingPolicy      BookingPolicy?
-  pricingRules       PricingRule[]
-  memberships        StaffMembership[]
-  assessments        Assessment[]
-  assessmentRequests AssessmentRequest[]
-  trainingRecords    TrainingRecord[]
-  homePlayers        PlayerProfile[]
-  preferredBy        PlayerProfile[]     @relation("PreferredLocations")
-  auditLogs          AuditLog[]
+  courts              Court[]
+  bookings            Booking[]
+  gameSessions        GameSession[]
+  trainerLocations    TrainerLocation[]
+  trainerAvailability TrainerAvailability[]
+  lessons             Lesson[]
+  programs            Program[]
+  packages            TrainingPackage[]
+  photos              LocationPhoto[]
+  bookingPolicy       BookingPolicy?
+  pricingRules        PricingRule[]
+  memberships         StaffMembership[]
+  assessments         Assessment[]
+  assessmentRequests  AssessmentRequest[]
+  trainingRecords     TrainingRecord[]
+  homePlayers         PlayerProfile[]
+  preferredBy         PlayerProfile[]       @relation("PreferredLocations")
+  auditLogs           AuditLog[]
 
   @@index([status])
   @@index([city])
@@ -581,12 +663,14 @@ model Court {
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
-  location     Location            @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  availability CourtAvailability[]
-  closures     CourtClosure[]
-  pricingRules PricingRule[]
-  bookings     Booking[]
-  gameSessions GameSession[]
+  location        Location            @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  availability    CourtAvailability[]
+  closures        CourtClosure[]
+  pricingRules    PricingRule[]
+  bookings        Booking[]
+  gameSessions    GameSession[]
+  lessons         Lesson[]
+  programSessions ProgramSession[]
 
   @@unique([locationId, name])
   @@index([locationId, status])
@@ -691,23 +775,33 @@ model BookingParticipant {
 
 /// Money owed or taken for a booking. No provider is connected yet: records are created PENDING
 /// and settled by staff (cash/card at venue) until online payments ship.
+/// Money owed or taken for a booking, a lesson, a program enrollment or a package. Exactly one target is set.
 model Payment {
-  id          String        @id @default(cuid())
-  bookingId   String
-  amountCents Int
-  currency    String        @default("EGP")
-  status      PaymentStatus @default(PENDING)
-  method      PaymentMethod @default(NONE)
-  provider    String?
-  providerRef String?
-  paidAt      DateTime?
-  refundedAt  DateTime?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id           String        @id @default(cuid())
+  bookingId    String?
+  lessonId     String?
+  enrollmentId String?
+  purchaseId   String?
+  amountCents  Int
+  currency     String        @default("EGP")
+  status       PaymentStatus @default(PENDING)
+  method       PaymentMethod @default(NONE)
+  provider     String?
+  providerRef  String?
+  paidAt       DateTime?
+  refundedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
-  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  booking    Booking?           @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  lesson     Lesson?            @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  enrollment ProgramEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  purchase   PackagePurchase?   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
 
   @@index([bookingId])
+  @@index([lessonId])
+  @@index([enrollmentId])
+  @@index([purchaseId])
   @@index([status])
 }
 
@@ -857,6 +951,310 @@ model MatchmakingConfig {
   /// Open requests a player may have at once.
   maxOpenRequests     Int      @default(5)
   updatedAt           DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------- Academy: trainers, lessons, programs, packages
+
+/// Public coaching profile of a user who holds the TRAINER role at one or more locations.
+model TrainerProfile {
+  id               String        @id @default(cuid())
+  userId           String        @unique
+  title            String        @db.VarChar(80)
+  bio              String?       @db.VarChar(2000)
+  photoUrl         String?
+  qualifications   String[]      @default([])
+  languages        String[]      @default([])
+  specialties      String[]      @default([])
+  /// Levels this trainer coaches. Empty = every level.
+  levels           PlayerLevel[] @default([])
+  hourlyRateCents  Int
+  currency         String        @default("EGP")
+  /// Lesson lengths offered, in minutes.
+  durationsMinutes Int[]         @default([60])
+  /// When false, new lessons start REQUESTED and the trainer confirms each one.
+  autoConfirm      Boolean       @default(true)
+  status           TrainerStatus @default(ACTIVE)
+  yearsExperience  Int?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  locations     TrainerLocation[]
+  availability  TrainerAvailability[]
+  timeOff       TrainerTimeOff[]
+  lessons       Lesson[]
+  programs      Program[]
+  progressNotes ProgressNote[]
+  packages      TrainingPackage[]
+
+  @@index([status])
+}
+
+model TrainerLocation {
+  id         String @id @default(cuid())
+  trainerId  String
+  locationId String
+
+  trainer  TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  location Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([trainerId, locationId])
+}
+
+/// Weekly coaching hours per location; lessons are offered inside these windows.
+model TrainerAvailability {
+  id           String @id @default(cuid())
+  trainerId    String
+  locationId   String
+  dayOfWeek    Int
+  startMinutes Int
+  endMinutes   Int
+
+  trainer  TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  location Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([trainerId, dayOfWeek])
+}
+
+model TrainerTimeOff {
+  id        String   @id @default(cuid())
+  trainerId String
+  startsAt  DateTime
+  endsAt    DateTime
+  reason    String?  @db.VarChar(200)
+
+  trainer TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+
+  @@index([trainerId, startsAt])
+}
+
+/// A private lesson. Overlapping active lessons for one trainer are rejected by the Lesson_trainer_no_overlap
+/// exclusion constraint (migration 20261003110000_academy) as well as by the service lock.
+model Lesson {
+  id                 String       @id @default(cuid())
+  code               String       @unique
+  trainerId          String
+  playerId           String
+  locationId         String
+  courtId            String?
+  startsAt           DateTime
+  endsAt             DateTime
+  durationMinutes    Int
+  status             LessonStatus @default(CONFIRMED)
+  priceCents         Int
+  currency           String       @default("EGP")
+  /// What the player wants to work on.
+  focus              String?      @db.VarChar(500)
+  cancelledAt        DateTime?
+  cancelledById      String?
+  cancellationReason String?      @db.VarChar(500)
+  rescheduledFromId  String?      @unique
+  createdById        String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  trainer         TrainerProfile     @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  player          User               @relation("LessonPlayer", fields: [playerId], references: [id], onDelete: Cascade)
+  location        Location           @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  court           Court?             @relation(fields: [courtId], references: [id], onDelete: SetNull)
+  cancelledBy     User?              @relation("LessonCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+  createdBy       User?              @relation("LessonCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  rescheduledFrom Lesson?            @relation("LessonReschedule", fields: [rescheduledFromId], references: [id], onDelete: SetNull)
+  rescheduledTo   Lesson?            @relation("LessonReschedule")
+  payments        Payment[]
+  redemption      PackageRedemption?
+  notes           ProgressNote[]
+
+  @@index([trainerId, startsAt])
+  @@index([playerId, startsAt(sort: Desc)])
+  @@index([locationId, startsAt])
+  @@index([status, startsAt])
+}
+
+/// A trainer's note about a player. PRIVATE notes are seen by the author and location staff with training.read;
+/// SHARED notes are also shown to the player.
+model ProgressNote {
+  id         String         @id @default(cuid())
+  trainerId  String
+  playerId   String
+  lessonId   String?
+  programId  String?
+  body       String         @db.VarChar(2000)
+  visibility NoteVisibility @default(PRIVATE)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  trainer TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  player  User           @relation("NotePlayer", fields: [playerId], references: [id], onDelete: Cascade)
+  lesson  Lesson?        @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  program Program?       @relation(fields: [programId], references: [id], onDelete: SetNull)
+
+  @@index([playerId, createdAt(sort: Desc)])
+  @@index([trainerId, createdAt(sort: Desc)])
+}
+
+/// A multi-session training program run by one trainer at one location.
+model Program {
+  id                      String          @id @default(cuid())
+  code                    String          @unique
+  name                    String          @db.VarChar(120)
+  category                ProgramCategory @default(GROUP_COACHING)
+  description             String?         @db.VarChar(2000)
+  /// Level requirement. Empty = any level; players without an official level are admitted only when empty.
+  levels                  PlayerLevel[]   @default([])
+  minAge                  Int?
+  maxAge                  Int?
+  trainerId               String
+  locationId              String
+  startsOn                DateTime        @db.Date
+  endsOn                  DateTime        @db.Date
+  /// Weekly slots: [{ dayOfWeek, startMinutes, durationMinutes }]
+  schedule                Json
+  sessionsCount           Int
+  capacity                Int
+  priceCents              Int
+  currency                String          @default("EGP")
+  allowWaitlist           Boolean         @default(true)
+  enrollmentClosesAt      DateTime?
+  cancellationCutoffHours Int             @default(72)
+  enrollmentRules         String?         @db.VarChar(1000)
+  cancellationRules       String?         @db.VarChar(1000)
+  status                  ProgramStatus   @default(DRAFT)
+  createdById             String?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+
+  trainer     TrainerProfile      @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  location    Location            @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  createdBy   User?               @relation("ProgramCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  sessions    ProgramSession[]
+  enrollments ProgramEnrollment[]
+  notes       ProgressNote[]
+
+  @@index([locationId, startsOn])
+  @@index([status, startsOn])
+  @@index([trainerId, startsOn])
+}
+
+model ProgramSession {
+  id        String               @id @default(cuid())
+  programId String
+  index     Int
+  startsAt  DateTime
+  endsAt    DateTime
+  courtId   String?
+  status    ProgramSessionStatus @default(SCHEDULED)
+  topic     String?              @db.VarChar(200)
+
+  program    Program             @relation(fields: [programId], references: [id], onDelete: Cascade)
+  court      Court?              @relation(fields: [courtId], references: [id], onDelete: SetNull)
+  attendance ProgramAttendance[]
+
+  @@unique([programId, index])
+  @@index([startsAt])
+}
+
+model ProgramEnrollment {
+  id           String           @id @default(cuid())
+  programId    String
+  playerId     String
+  status       EnrollmentStatus @default(ENROLLED)
+  /// Order on the waitlist (1 = next in line). Null once enrolled.
+  position     Int?
+  enrolledAt   DateTime?
+  cancelledAt  DateTime?
+  cancelReason String?          @db.VarChar(500)
+  createdById  String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  program    Program             @relation(fields: [programId], references: [id], onDelete: Cascade)
+  player     User                @relation("EnrollmentPlayer", fields: [playerId], references: [id], onDelete: Cascade)
+  createdBy  User?               @relation("EnrollmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  attendance ProgramAttendance[]
+  payments   Payment[]
+
+  @@unique([programId, playerId])
+  @@index([playerId, status])
+  @@index([programId, status, position])
+}
+
+model ProgramAttendance {
+  id           String           @id @default(cuid())
+  sessionId    String
+  enrollmentId String
+  status       AttendanceStatus @default(PRESENT)
+  markedById   String?
+  markedAt     DateTime         @default(now())
+
+  session    ProgramSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  enrollment ProgramEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  markedBy   User?             @relation("AttendanceMarkedBy", fields: [markedById], references: [id], onDelete: SetNull)
+
+  @@unique([sessionId, enrollmentId])
+}
+
+/// A prepaid bundle of lessons for sale. trainerId / locationId restrict where the credits may be used.
+model TrainingPackage {
+  id           String   @id @default(cuid())
+  name         String   @db.VarChar(80)
+  description  String?  @db.VarChar(500)
+  credits      Int
+  priceCents   Int
+  currency     String   @default("EGP")
+  validityDays Int      @default(90)
+  trainerId    String?
+  locationId   String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  trainer   TrainerProfile?   @relation(fields: [trainerId], references: [id], onDelete: SetNull)
+  location  Location?         @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  purchases PackagePurchase[]
+
+  @@index([active])
+}
+
+/// A player's purchased package: credits, usage and expiry. Payment stays in Payment.
+model PackagePurchase {
+  id          String         @id @default(cuid())
+  code        String         @unique
+  playerId    String
+  packageId   String?
+  name        String         @db.VarChar(80)
+  credits     Int
+  creditsUsed Int            @default(0)
+  priceCents  Int
+  currency    String         @default("EGP")
+  trainerId   String?
+  locationId  String?
+  purchasedAt DateTime       @default(now())
+  expiresAt   DateTime
+  status      PurchaseStatus @default(ACTIVE)
+  createdById String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  player      User                @relation("PurchasePlayer", fields: [playerId], references: [id], onDelete: Cascade)
+  package     TrainingPackage?    @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  createdBy   User?               @relation("PurchaseCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  redemptions PackageRedemption[]
+  payments    Payment[]
+
+  @@index([playerId, status])
+}
+
+model PackageRedemption {
+  id         String    @id @default(cuid())
+  purchaseId String
+  lessonId   String    @unique
+  credits    Int       @default(1)
+  redeemedAt DateTime  @default(now())
+  refundedAt DateTime?
+
+  purchase PackagePurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  lesson   Lesson          @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 }
 
 // ---------------------------------------------------------------- Staff

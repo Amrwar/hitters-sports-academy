@@ -391,3 +391,110 @@ export const matchmakingConfigSchema = z.object({
   requestExpiryHours: z.coerce.number().int().min(1).max(24 * 14),
   maxOpenRequests: z.coerce.number().int().min(1).max(20),
 });
+
+/* ------------------------------------------------------------------ Academy: trainers, lessons, programs, packages */
+
+const textOpt = (max: number) => z.string().trim().max(max).optional().or(z.literal("").transform(() => undefined));
+const money = z.coerce.number().int().min(0).max(100_000_000);
+
+export const trainerProfileSchema = z.object({
+  userId: z.string().cuid(),
+  title: z.string().trim().min(2).max(80),
+  bio: textOpt(2000),
+  photoUrl: textOpt(500),
+  qualifications: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
+  languages: z.array(z.string().trim().min(1).max(40)).max(10).default([]),
+  specialties: z.array(z.string().trim().min(1).max(60)).max(15).default([]),
+  levels: z.array(levelSchema).max(4).default([]),
+  hourlyRateCents: money,
+  durationsMinutes: z.array(z.coerce.number().int().min(30).max(180)).min(1).max(6).default([60]),
+  autoConfirm: z.coerce.boolean().default(true),
+  status: z.enum(["ACTIVE", "INACTIVE"]).default("ACTIVE"),
+  yearsExperience: z.coerce.number().int().min(0).max(60).nullable().optional(),
+  locationIds: z.array(z.string().cuid()).min(1).max(10),
+});
+export const trainerProfileUpdateSchema = trainerProfileSchema.omit({ userId: true }).partial();
+
+export const trainerAvailabilitySchema = z.object({
+  rows: z
+    .array(
+      z.object({
+        locationId: z.string().cuid(),
+        dayOfWeek: z.coerce.number().int().min(0).max(6),
+        startMinutes: z.coerce.number().int().min(0).max(24 * 60),
+        endMinutes: z.coerce.number().int().min(0).max(24 * 60),
+      }),
+    )
+    .max(60)
+    .refine((rows) => rows.every((r) => r.endMinutes > r.startMinutes), "Each window must end after it starts."),
+});
+
+export const timeOffSchema = z.object({ startLocal: z.string().min(16), endLocal: z.string().min(16), reason: textOpt(200) }).refine((v) => v.endLocal > v.startLocal, { message: "End must be after start.", path: ["endLocal"] });
+
+export const lessonRequestSchema = z.object({
+  trainerId: z.string().cuid(),
+  locationId: z.string().cuid(),
+  dateISO: dateISOSchema,
+  startMinutes: z.coerce.number().int().min(0).max(24 * 60 - 30),
+  durationMinutes: z.coerce.number().int().min(30).max(180),
+  focus: textOpt(500),
+  /** Pay with credits from this purchase instead of at the venue. */
+  purchaseId: z.string().cuid().optional(),
+  /** Staff may book for a member. */
+  playerId: z.string().cuid().optional(),
+});
+export type LessonRequest = z.infer<typeof lessonRequestSchema>;
+
+export const lessonCancelSchema = z.object({ reason: textOpt(500) });
+export const lessonAttendanceSchema = z.object({ status: z.enum(["COMPLETED", "NO_SHOW"]) });
+export const progressNoteSchema = z.object({ playerId: z.string().cuid(), lessonId: z.string().cuid().optional(), programId: z.string().cuid().optional(), body: z.string().trim().min(2).max(2000), visibility: z.enum(["PRIVATE", "SHARED"]).default("PRIVATE") });
+
+export const programScheduleSlot = z.object({ dayOfWeek: z.coerce.number().int().min(0).max(6), startMinutes: z.coerce.number().int().min(0).max(24 * 60), durationMinutes: z.coerce.number().int().min(30).max(240) });
+export const programSchema = z
+  .object({
+    name: z.string().trim().min(3).max(120),
+    category: z.enum(["BEGINNER", "INTERMEDIATE", "ADVANCED", "JUNIOR", "COMPETITIVE", "INTENSIVE", "GROUP_COACHING"]).default("GROUP_COACHING"),
+    description: textOpt(2000),
+    levels: z.array(levelSchema).max(4).default([]),
+    minAge: z.coerce.number().int().min(3).max(99).nullable().optional(),
+    maxAge: z.coerce.number().int().min(3).max(99).nullable().optional(),
+    trainerId: z.string().cuid(),
+    locationId: z.string().cuid(),
+    startsOn: dateISOSchema,
+    endsOn: dateISOSchema,
+    schedule: z.array(programScheduleSlot).min(1).max(7),
+    sessionsCount: z.coerce.number().int().min(1).max(100),
+    capacity: z.coerce.number().int().min(1).max(60),
+    priceCents: money,
+    allowWaitlist: z.coerce.boolean().default(true),
+    enrollmentClosesAt: z.coerce.date().nullable().optional(),
+    cancellationCutoffHours: z.coerce.number().int().min(0).max(24 * 30).default(72),
+    enrollmentRules: textOpt(1000),
+    cancellationRules: textOpt(1000),
+    courtId: z.string().cuid().optional(),
+  })
+  .refine((v) => v.endsOn >= v.startsOn, { message: "The program must end on or after it starts.", path: ["endsOn"] });
+export const programUpdateSchema = programSchema.innerType().partial();
+
+export const enrollmentCancelSchema = z.object({ reason: textOpt(500) });
+export const attendanceMarkSchema = z.object({ marks: z.array(z.object({ enrollmentId: z.string().cuid(), status: z.enum(["PRESENT", "ABSENT", "LATE", "EXCUSED"]) })).min(1).max(100) });
+
+export const packageSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  description: textOpt(500),
+  credits: z.coerce.number().int().min(1).max(100),
+  priceCents: money,
+  validityDays: z.coerce.number().int().min(7).max(730).default(90),
+  trainerId: z.string().cuid().nullable().optional(),
+  locationId: z.string().cuid().nullable().optional(),
+  active: z.coerce.boolean().default(true),
+});
+export const packagePurchaseSchema = z.object({
+  packageId: z.string().cuid().optional(),
+  /** Custom package: staff enter credits and price directly. */
+  name: textOpt(80),
+  credits: z.coerce.number().int().min(1).max(100).optional(),
+  priceCents: money.optional(),
+  validityDays: z.coerce.number().int().min(7).max(730).optional(),
+  playerId: z.string().cuid().optional(),
+});
