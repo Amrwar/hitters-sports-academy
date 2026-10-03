@@ -169,8 +169,44 @@
   },
   {
     "name": "player-programs",
-    "caption": "Academy programs (sample data until the academy phase).",
+    "caption": "Academy: private coaching and packages, my programs, open programs for my level.",
     "file": "docs/screenshots/player-programs.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-program-detail",
+    "caption": "Program: dates, schedule, group size, rules, coach, every session with my attendance, enroll or waitlist.",
+    "file": "docs/screenshots/player-program-detail.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-trainers",
+    "caption": "Coaches filtered by club and level, with specialties and hourly rate.",
+    "file": "docs/screenshots/player-trainers.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-trainer-detail",
+    "caption": "Coach profile: bio, qualifications, languages, levels, availability picker and lesson booking with package credits.",
+    "file": "docs/screenshots/player-trainer-detail.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-lessons",
+    "caption": "My lessons: upcoming and history.",
+    "file": "docs/screenshots/player-lessons.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-lesson-detail",
+    "caption": "Lesson: time, coach, price or credit, free-change window, reschedule and cancel, shared coach notes.",
+    "file": "docs/screenshots/player-lesson-detail.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-packages",
+    "caption": "Packages: credits left, expiry, catalogue, lesson history.",
+    "file": "docs/screenshots/player-packages.png",
     "viewport": "phone"
   },
   {
@@ -255,6 +291,42 @@
     "name": "admin-settings",
     "caption": "Academy settings: matchmaking rules (adjacent levels, request expiry, open-request cap) and the scoring table.",
     "file": "docs/screenshots/admin-settings.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-trainers",
+    "caption": "Trainer profiles: clubs, levels, specialties, rate, booking mode, status.",
+    "file": "docs/screenshots/admin-trainers.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-programs",
+    "caption": "Programs: schedule, enrollment progress, status, roster with waitlist, attendance and payments.",
+    "file": "docs/screenshots/admin-programs.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-packages",
+    "caption": "Packages: catalogue and member purchases with credits, expiry and payments.",
+    "file": "docs/screenshots/admin-packages.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-coaching",
+    "caption": "Trainer workspace: upcoming lessons and requests with accept, attendance and notes.",
+    "file": "docs/screenshots/admin-coaching.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-coaching-availability",
+    "caption": "Weekly coaching hours per club, auto-confirm switch and time off.",
+    "file": "docs/screenshots/admin-coaching-availability.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-coaching-students",
+    "caption": "Assigned students with lessons, last and next session, programs and progress notes.",
+    "file": "docs/screenshots/admin-coaching-students.png",
     "viewport": "desktop"
   }
 ]

@@ -214,8 +214,9 @@ try {
   await shot(page, "admin-packages", "Packages: catalogue and member purchases with credits, expiry and payments.", { viewport: "desktop" });
   await page.close();
 
-  /* ------------------------------------------------------------------ Trainer workspace (desktop) */
-  page = await browser.newPage();
+  /* ------------------------------------------------------------------ Trainer workspace (desktop, fresh session) */
+  const coachContext = await browser.createBrowserContext();
+  page = await coachContext.newPage();
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1.5 });
   await login(page, "coach.ahmed@hitters.academy");
   await go(page, "/admin/coaching");
