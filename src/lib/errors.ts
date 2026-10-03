@@ -1,4 +1,18 @@
-export type ErrorCode = "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "VALIDATION" | "CONFLICT" | "RATE_LIMITED" | "INVALID_TOKEN";
+export type ErrorCode =
+  | "UNAUTHENTICATED"
+  | "FORBIDDEN"
+  | "NOT_FOUND"
+  | "VALIDATION"
+  | "CONFLICT"
+  | "RATE_LIMITED"
+  | "INVALID_TOKEN"
+  // Booking domain
+  | "SLOT_UNAVAILABLE"
+  | "COURT_UNAVAILABLE"
+  | "BOOKING_CONFLICT"
+  | "CANCELLATION_NOT_ALLOWED"
+  | "INVALID_DURATION"
+  | "LOCATION_CLOSED";
 
 const STATUS: Record<ErrorCode, number> = {
   UNAUTHENTICATED: 401,
@@ -8,6 +22,12 @@ const STATUS: Record<ErrorCode, number> = {
   CONFLICT: 409,
   RATE_LIMITED: 429,
   INVALID_TOKEN: 400,
+  SLOT_UNAVAILABLE: 409,
+  COURT_UNAVAILABLE: 409,
+  BOOKING_CONFLICT: 409,
+  CANCELLATION_NOT_ALLOWED: 403,
+  INVALID_DURATION: 400,
+  LOCATION_CLOSED: 409,
 };
 
 /** Domain error carried from services to actions and route handlers. */

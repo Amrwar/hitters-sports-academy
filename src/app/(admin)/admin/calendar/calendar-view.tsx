@@ -21,6 +21,7 @@ type Props = { locations: { id: string; name: string; timezone: string }[]; sche
 
 const STYLE: Record<Slot["status"], string> = {
   available: "border-line/10 bg-surface-2 text-fg hover:border-blue-400/60",
+  booked: "border-blue-400/40 bg-brand-gradient text-white shadow-glow-sm hover:brightness-110",
   past: "border-transparent bg-line/[0.04] text-fg-subtle/50",
   too_soon: "border-blue-400/20 bg-blue-500/5 text-fg-subtle",
   outside_window: "border-dashed border-line/15 bg-transparent text-fg-subtle",
@@ -32,6 +33,7 @@ const STYLE: Record<Slot["status"], string> = {
 
 const LABEL: Record<Slot["status"], string> = {
   available: "Available",
+  booked: "Booked",
   past: "Past",
   too_soon: "Inside min. notice",
   outside_window: "Beyond booking window",
@@ -59,7 +61,7 @@ export function CalendarView({ locations, schedule, canManage }: Props) {
 
   const stats = useMemo(() => {
     const all = schedule?.courts.flatMap((c) => c.slots) ?? [];
-    return { total: all.length, available: all.filter((s) => s.status === "available").length, closed: all.filter((s) => s.status === "closed" || s.status === "maintenance").length };
+    return { total: all.length, available: all.filter((s) => s.status === "available").length, booked: all.filter((s) => s.status === "booked").length, closed: all.filter((s) => s.status === "closed" || s.status === "maintenance").length };
   }, [schedule]);
 
   if (!schedule) {
@@ -132,6 +134,7 @@ export function CalendarView({ locations, schedule, canManage }: Props) {
         <span className="font-bold text-fg">{dateLabel}</span>
         <span>· {tz}</span>
         <Badge tone="brand">{stats.available} available</Badge>
+        <Badge tone="success">{stats.booked} booked</Badge>
         <Badge tone="warning">{stats.closed} closed</Badge>
         <Badge>{stats.total} slots</Badge>
       </div>
@@ -155,7 +158,7 @@ export function CalendarView({ locations, schedule, canManage }: Props) {
               ))}
             </div>
             <div className="mt-3 flex flex-wrap gap-4 text-caption text-fg-muted">
-              {(["available", "closed", "maintenance", "too_soon", "outside_window", "past"] as Slot["status"][]).map((s) => (
+              {(["available", "booked", "closed", "maintenance", "too_soon", "outside_window", "past"] as Slot["status"][]).map((s) => (
                 <span key={s} className="flex items-center gap-1.5">
                   <span className={cn("size-3 rounded-[3px] border", STYLE[s])} /> {LABEL[s]}
                 </span>
@@ -217,6 +220,20 @@ function RowFor({ schedule, columns, canManage, onBlock }: { schedule: LocationS
         const s = byStart.get(m);
         if (!s) return <div key={m} className="h-12 rounded-sm bg-line/[0.02]" />;
         const clickable = canManage && (s.status === "available" || s.status === "too_soon" || s.status === "outside_window");
+        if (s.status === "booked" && s.booking) {
+          const label = s.booking.label ?? "Booked";
+          return (
+            <a
+              key={m}
+              href={"/admin/bookings/" + s.booking.id}
+              title={minutesToHHMM(s.startMinutes) + "–" + minutesToHHMM(s.endMinutes) + " · Booked · " + label}
+              className={cn("flex h-12 flex-col items-center justify-center overflow-hidden rounded-sm border px-1 text-[11px] font-semibold transition-all", STYLE.booked)}
+            >
+              <span className="w-full truncate text-center">{label.split(" ")[0]}</span>
+              <span className="text-[9px] uppercase tracking-wider text-white/70">booked</span>
+            </a>
+          );
+        }
         return (
           <button
             key={m}

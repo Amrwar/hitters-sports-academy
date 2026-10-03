@@ -12,8 +12,8 @@ import { Field, Input, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { EmptyState } from "@/components/ui/states";
 import { useToast } from "@/components/ui/toast";
-import { BookingCard } from "@/components/patterns/cards";
-import { bookings } from "@/data/mock";
+import { BookingRow } from "@/components/patterns/booking-row";
+import type { BookingView } from "@/server/services/bookings";
 import { LEVEL_LABEL } from "@/lib/tokens";
 import type { ProfileView as Profile } from "@/server/services/profiles";
 import { updateProfileAction } from "@/server/actions/profile";
@@ -21,7 +21,7 @@ import { changePasswordAction, logoutAction } from "@/server/actions/auth";
 
 type Tab = "bookings" | "history" | "settings";
 
-export function ProfileView({ profile, locations, isStaff }: { profile: Profile; locations: { id: string; name: string }[]; isStaff: boolean }) {
+export function ProfileView({ profile, locations, isStaff, upcoming }: { profile: Profile; locations: { id: string; name: string }[]; isStaff: boolean; upcoming: BookingView[] }) {
   const [tab, setTab] = useState<Tab>("bookings");
   const memberSince = new Date(profile.user.createdAt).toLocaleDateString("en", { month: "short", year: "numeric" });
 
@@ -79,16 +79,17 @@ export function ProfileView({ profile, locations, isStaff }: { profile: Profile;
 
       {tab === "bookings" && (
         <div className="space-y-5">
-          <Badge>Sample data until booking launches</Badge>
           <section>
-            <SectionHeader title="Upcoming" />
-            <div className="space-y-2.5">
-              {bookings
-                .filter((b) => b.status === "confirmed" || b.status === "pending")
-                .map((b) => (
-                  <BookingCard key={b.id} booking={b} />
+            <SectionHeader title="Upcoming" action={<Button variant="link" size="sm" href="/app/bookings">History</Button>} />
+            {upcoming.length === 0 ? (
+              <EmptyState compact icon={<CalendarCheck />} title="No upcoming bookings" action={<Button href="/app/book">Book a court</Button>} />
+            ) : (
+              <div className="space-y-2.5">
+                {upcoming.map((b) => (
+                  <BookingRow key={b.id} booking={b} href={"/app/bookings/" + b.id} />
                 ))}
-            </div>
+              </div>
+            )}
           </section>
         </div>
       )}

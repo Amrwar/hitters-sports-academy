@@ -101,6 +101,48 @@ enum PricingRuleKind {
   CUSTOM
 }
 
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum BookingSource {
+  PLAYER_APP
+  ADMIN
+  RECEPTION
+}
+
+enum ParticipantRole {
+  ORGANIZER
+  PLAYER
+}
+
+enum ParticipantStatus {
+  INVITED
+  JOINED
+  DECLINED
+  REMOVED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+  WAIVED
+  CANCELLED
+  FAILED
+}
+
+enum PaymentMethod {
+  NONE
+  CASH
+  CARD
+  WALLET
+}
+
 enum NotificationChannel {
   IN_APP
   EMAIL
@@ -139,6 +181,10 @@ model User {
   assessmentsGiven   Assessment[]        @relation("AssessmentAssessor")
   notifications      Notification[]
   auditLogs          AuditLog[]
+  bookings           Booking[]           @relation("BookingPlayer")
+  createdBookings    Booking[]           @relation("BookingCreatedBy")
+  cancelledBookings  Booking[]           @relation("BookingCancelledBy")
+  participations     BookingParticipant[]
 
   @@index([status])
   @@index([globalRole])
@@ -254,6 +300,7 @@ model Location {
   updatedAt    DateTime       @updatedAt
 
   courts        Court[]
+  bookings      Booking[]
   photos        LocationPhoto[]
   bookingPolicy BookingPolicy?
   pricingRules  PricingRule[]
@@ -347,6 +394,7 @@ model Court {
   availability CourtAvailability[]
   closures     CourtClosure[]
   pricingRules PricingRule[]
+  bookings     Booking[]
 
   @@unique([locationId, name])
   @@index([locationId, status])
@@ -383,6 +431,91 @@ model CourtClosure {
   court Court @relation(fields: [courtId], references: [id], onDelete: Cascade)
 
   @@index([courtId, startsAt])
+}
+
+// ---------------------------------------------------------------- Bookings
+
+/// A court reservation. Who plays lives in BookingParticipant; money lives in Payment.
+/// Active bookings (PENDING, CONFIRMED) cannot overlap on a court: enforced by a Postgres
+/// exclusion constraint (see migration 20261003040000_bookings) in addition to the service-level lock.
+model Booking {
+  id                 String        @id @default(cuid())
+  confirmationCode   String        @unique
+  courtId            String
+  locationId         String
+  /// Account that holds the reservation. Null only for staff-created guest bookings.
+  playerId           String?
+  guestName          String?       @db.VarChar(80)
+  guestPhone         String?       @db.VarChar(30)
+  startsAt           DateTime
+  endsAt             DateTime
+  durationMinutes    Int
+  status             BookingStatus @default(CONFIRMED)
+  source             BookingSource @default(PLAYER_APP)
+  priceCents         Int
+  currency           String        @default("EGP")
+  notes              String?       @db.VarChar(500)
+  createdById        String?
+  cancelledAt        DateTime?
+  cancelledById      String?
+  cancellationReason String?       @db.VarChar(500)
+  rescheduledFromId  String?       @unique
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  court           Court                @relation(fields: [courtId], references: [id], onDelete: Restrict)
+  location        Location             @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  player          User?                @relation("BookingPlayer", fields: [playerId], references: [id], onDelete: SetNull)
+  createdBy       User?                @relation("BookingCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  cancelledBy     User?                @relation("BookingCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+  rescheduledFrom Booking?             @relation("Reschedule", fields: [rescheduledFromId], references: [id], onDelete: SetNull)
+  rescheduledTo   Booking?             @relation("Reschedule")
+  participants    BookingParticipant[]
+  payments        Payment[]
+
+  @@index([courtId, startsAt])
+  @@index([locationId, startsAt])
+  @@index([playerId, startsAt(sort: Desc)])
+  @@index([status, startsAt])
+}
+
+/// Who takes part in a booked session. Matchmaking will add participants to existing bookings.
+model BookingParticipant {
+  id        String            @id @default(cuid())
+  bookingId String
+  userId    String?
+  guestName String?           @db.VarChar(80)
+  role      ParticipantRole   @default(PLAYER)
+  status    ParticipantStatus @default(JOINED)
+  createdAt DateTime          @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, userId])
+  @@index([userId])
+}
+
+/// Money owed or taken for a booking. No provider is connected yet: records are created PENDING
+/// and settled by staff (cash/card at venue) until online payments ship.
+model Payment {
+  id          String        @id @default(cuid())
+  bookingId   String
+  amountCents Int
+  currency    String        @default("EGP")
+  status      PaymentStatus @default(PENDING)
+  method      PaymentMethod @default(NONE)
+  provider    String?
+  providerRef String?
+  paidAt      DateTime?
+  refundedAt  DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@index([status])
 }
 
 // ---------------------------------------------------------------- Staff

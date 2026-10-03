@@ -217,3 +217,39 @@ export const closureLocalSchema = z
   .refine((v) => v.endLocal > v.startLocal, { message: "End must be after start.", path: ["endLocal"] });
 
 export const dateISOSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD.");
+
+/* ------------------------------------------------------------------ Bookings (phase: reservations) */
+
+export const bookingRequestSchema = z.object({
+  courtId: z.string().cuid(),
+  dateISO: dateISOSchema,
+  startMinutes: z.coerce.number().int().min(0).max(24 * 60 - 30),
+  durationMinutes: z.coerce.number().int().min(30).max(240),
+});
+export type BookingRequest = z.infer<typeof bookingRequestSchema>;
+
+export const createBookingSchema = bookingRequestSchema.extend({
+  /** Staff may book on behalf of a member... */
+  playerId: z.string().cuid().optional(),
+  /** ...or a walk-in guest without an account. */
+  guestName: z.string().trim().min(2).max(80).optional().or(z.literal("").transform(() => undefined)),
+  guestPhone: z.string().trim().max(30).optional().or(z.literal("").transform(() => undefined)),
+  notes: z.string().trim().max(500).optional().or(z.literal("").transform(() => undefined)),
+  participantIds: z.array(z.string().cuid()).max(3).optional(),
+});
+
+export const cancelBookingSchema = z.object({ reason: z.string().trim().max(500).optional().or(z.literal("").transform(() => undefined)) });
+
+export const recordPaymentSchema = z.object({
+  method: z.enum(["CASH", "CARD", "WALLET"]),
+  status: z.enum(["PAID", "WAIVED"]).default("PAID"),
+});
+
+export const bookingListSchema = z.object({
+  locationId: z.string().cuid(),
+  dateISO: dateISOSchema.optional(),
+  status: z.enum(["PENDING", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW"]).optional(),
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(100),
+});

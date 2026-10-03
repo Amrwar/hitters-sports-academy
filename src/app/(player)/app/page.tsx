@@ -3,8 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Card, SectionHeader } from "@/components/ui/card";
 import { Badge, LevelBadge } from "@/components/ui/badge";
 import { StatTile } from "@/components/ui/misc";
-import { BookingCard, MatchCard, ProgramCard, QuickAction } from "@/components/patterns/cards";
-import { bookings, locationBySlug, matches, programs } from "@/data/mock";
+import { MatchCard, ProgramCard, QuickAction } from "@/components/patterns/cards";
+import { BookingRow } from "@/components/patterns/booking-row";
+import { matches, programs } from "@/data/mock";
+import { listMyBookings } from "@/server/services/bookings";
+import { formatInZone } from "@/lib/time";
 import { requireActorOrRedirect } from "@/lib/auth/cookies";
 import { getMyProfile } from "@/server/services/profiles";
 
@@ -15,10 +18,9 @@ function greeting() {
 
 export default async function PlayerDashboard() {
   const actor = await requireActorOrRedirect("/app");
-  const profile = await getMyProfile(actor);
-  // Bookings, sessions and programs are still mock data until those phases ship.
-  const next = bookings.find((b) => b.status === "confirmed");
-  const nextLoc = next && locationBySlug(next.locationSlug);
+  const [profile, upcoming] = await Promise.all([getMyProfile(actor), listMyBookings(actor, "upcoming")]);
+  // Sessions and programs are still mock data until those phases ship.
+  const next = upcoming[0];
   const live = matches.find((m) => m.status === "live");
   const open = matches.filter((m) => m.status === "open").slice(0, 2);
 
@@ -50,23 +52,23 @@ export default async function PlayerDashboard() {
         </Card>
       )}
 
-      {next && nextLoc && (
+      {next && (
         <Card variant="brand" padding="lg" className="court-line">
           <div className="relative">
             <div className="flex items-center justify-between">
               <span className="text-overline uppercase text-white/80">Next booking</span>
-              <span className="rounded-full bg-white/15 px-2.5 py-1 text-caption font-bold">{next.date}</span>
+              <span className="rounded-full bg-white/15 px-2.5 py-1 text-caption font-bold">{formatInZone(new Date(next.startsAt), next.location.timezone, { weekday: "short", day: "numeric", month: "short" })}</span>
             </div>
-            <div className="mt-3 text-display tabular">{next.time}</div>
-            <div className="mt-1 text-body-lg font-semibold">{nextLoc.name}</div>
+            <div className="mt-3 text-display tabular">{formatInZone(new Date(next.startsAt), next.location.timezone, { hour: "2-digit", minute: "2-digit" })}</div>
+            <div className="mt-1 text-body-lg font-semibold">{next.location.name}</div>
             <div className="flex items-center gap-1 text-body-sm text-white/80">
-              <MapPin size={14} /> {next.court} · {next.durationMin} min
+              <MapPin size={14} /> {next.court.name} · {next.durationMinutes} min · {next.confirmationCode}
             </div>
             <div className="mt-5 grid grid-cols-2 gap-2">
-              <Button variant="secondary" className="border-transparent bg-white text-blue-700 hover:bg-blue-50" href="/app/profile">
+              <Button variant="secondary" className="border-transparent bg-white text-blue-700 hover:bg-blue-50" href={"/app/bookings/" + next.id}>
                 View booking
               </Button>
-              <Button variant="outline" className="border-white/40 text-white hover:bg-white/10" leftIcon={<Navigation />}>
+              <Button variant="outline" className="border-white/40 text-white hover:bg-white/10" leftIcon={<Navigation />} href={"https://maps.google.com/?q=" + encodeURIComponent(next.location.address)}>
                 Directions
               </Button>
             </div>
@@ -75,7 +77,7 @@ export default async function PlayerDashboard() {
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <QuickAction href="/app/book" icon={<CalendarPlus />} label="Book a court" hint="From EGP 400/h" />
+        <QuickAction href="/app/book" icon={<CalendarPlus />} label="Book a court" hint={upcoming.length ? upcoming.length + " upcoming" : "From EGP 400/h"} />
         <QuickAction href="/app/play" icon={<Swords />} label="Find a match" hint="3 open near you" />
         <QuickAction href="/app/trainers" icon={<UserSquare2 />} label="Private coach" hint="Certified trainers" />
         <QuickAction href="/app/programs" icon={<GraduationCap />} label="Programs" hint="New intake Oct" />
@@ -119,19 +121,25 @@ export default async function PlayerDashboard() {
           eyebrow="Bookings"
           title="Upcoming"
           action={
-            <Button variant="link" size="sm" href="/app/profile" rightIcon={<ArrowRight />}>
+            <Button variant="link" size="sm" href="/app/bookings" rightIcon={<ArrowRight />}>
               All bookings
             </Button>
           }
         />
-        <div className="space-y-2.5">
-          {bookings
-            .filter((b) => b.status === "confirmed" || b.status === "pending")
-            .map((b) => (
-              <BookingCard key={b.id} booking={b} />
+        {upcoming.length === 0 ? (
+          <Card variant="outline" padding="md" className="flex items-center justify-between gap-3">
+            <span className="text-body-sm text-fg-muted">No upcoming bookings.</span>
+            <Button size="sm" href="/app/book">
+              Book a court
+            </Button>
+          </Card>
+        ) : (
+          <div className="space-y-2.5">
+            {upcoming.slice(0, 3).map((b) => (
+              <BookingRow key={b.id} booking={b} href={"/app/bookings/" + b.id} />
             ))}
-        </div>
-        <Badge className="mt-2">Sample data until booking launches</Badge>
+          </div>
+        )}
       </section>
 
       <section>

@@ -8,7 +8,7 @@ import { quotePrice } from "./pricing";
 
 /* ------------------------------------------------------------------ Pure engine */
 
-export type SlotStatus = "available" | "past" | "too_soon" | "outside_window" | "closed" | "maintenance" | "inactive" | "location_closed";
+export type SlotStatus = "available" | "booked" | "past" | "too_soon" | "outside_window" | "closed" | "maintenance" | "inactive" | "location_closed";
 
 export type Slot = {
   startsAt: Date;
@@ -19,6 +19,8 @@ export type Slot = {
   reason?: string;
   priceCents: number | null;
   peak: boolean;
+  /** Present when status is "booked". `mine` is true for the viewer's own booking; label only for staff. */
+  booking?: { id: string; mine: boolean; label?: string };
 };
 
 export type CourtSchedule = {
@@ -29,8 +31,11 @@ export type CourtSchedule = {
   slots: Slot[];
 };
 
+export type EngineBooking = { id: string; startsAt: Date; endsAt: Date; playerId: string | null; label?: string };
+
 export type EngineInput = {
-  court: Pick<Court, "id" | "name" | "type" | "status" | "sortOrder"> & { availability: CourtAvailability[]; closures: Pick<CourtClosure, "startsAt" | "endsAt" | "reason">[] };
+  court: Pick<Court, "id" | "name" | "type" | "status" | "sortOrder"> & { availability: CourtAvailability[]; closures: Pick<CourtClosure, "startsAt" | "endsAt" | "reason">[]; bookings?: EngineBooking[] };
+  viewerId?: string | null;
   location: { timezone: string; status: "ACTIVE" | "INACTIVE" | "COMING_SOON"; openingHours: OpeningHours | null; bookingPolicy: Pick<BookingPolicy, "advanceBookingDays" | "minNoticeMinutes"> | null };
   rules: PricingRule[];
   dateISO: string;
@@ -72,6 +77,7 @@ export function computeCourtDay(input: EngineInput): CourtSchedule {
       const endsAt = zonedToUtc(dateISO, t + w.slotMinutes, tz);
       const quote = quotePrice({ rules, courtId: court.id, baseHourlyCents: w.priceCents, dateISO, dayOfWeek, startMinutes: t, durationMinutes: w.slotMinutes, isMember: input.isMember, membershipTier: input.membershipTier });
       const closure = court.closures.find((c) => c.startsAt < endsAt && c.endsAt > startsAt);
+      const booking = (court.bookings ?? []).find((b) => b.startsAt < endsAt && b.endsAt > startsAt);
 
       let status: SlotStatus = "available";
       let reason: string | undefined;
@@ -81,11 +87,22 @@ export function computeCourtDay(input: EngineInput): CourtSchedule {
       else if (closure) {
         status = "closed";
         reason = closure.reason ?? undefined;
-      } else if (startsAt <= now) status = "past";
+      } else if (booking) status = "booked";
+      else if (startsAt <= now) status = "past";
       else if (startsAt < earliest) status = "too_soon";
       else if (startsAt > latest) status = "outside_window";
 
-      slots.push({ startsAt, endsAt, startMinutes: t, endMinutes: t + w.slotMinutes, status, reason, priceCents: quote.totalCents, peak: quote.adjustments.some((a) => a.kind === "PEAK" && a.deltaCents > 0) });
+      slots.push({
+        startsAt,
+        endsAt,
+        startMinutes: t,
+        endMinutes: t + w.slotMinutes,
+        status,
+        reason,
+        priceCents: quote.totalCents,
+        peak: quote.adjustments.some((a) => a.kind === "PEAK" && a.deltaCents > 0),
+        ...(booking ? { booking: { id: booking.id, mine: !!input.viewerId && booking.playerId === input.viewerId, label: booking.label } } : {}),
+      });
     }
   }
   return { ...base, open, slots };
@@ -123,7 +140,14 @@ export async function getLocationSchedule(actor: Actor | null, locationIdOrSlug:
   const [courts, rules] = await Promise.all([
     db.court.findMany({
       where: { locationId: location.id, ...(staff ? {} : { status: { in: ["ACTIVE", "MAINTENANCE"] } }) },
-      include: { availability: true, closures: { where: { startsAt: { lt: dayEnd }, endsAt: { gt: dayStart } }, select: { startsAt: true, endsAt: true, reason: true } } },
+      include: {
+        availability: true,
+        closures: { where: { startsAt: { lt: dayEnd }, endsAt: { gt: dayStart } }, select: { startsAt: true, endsAt: true, reason: true } },
+        bookings: {
+          where: { status: { in: ["PENDING", "CONFIRMED"] }, startsAt: { lt: dayEnd }, endsAt: { gt: dayStart } },
+          select: { id: true, startsAt: true, endsAt: true, playerId: true, guestName: true, confirmationCode: true, player: { select: { name: true } } },
+        },
+      },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     }),
     db.pricingRule.findMany({ where: { locationId: location.id, active: true } }),
@@ -133,6 +157,15 @@ export async function getLocationSchedule(actor: Actor | null, locationIdOrSlug:
   return {
     location: { id: location.id, slug: location.slug, name: location.name, timezone: location.timezone, status: location.status },
     dateISO,
-    courts: courts.map((court) => computeCourtDay({ court, location: { timezone: location.timezone, status: location.status, openingHours, bookingPolicy: location.bookingPolicy }, rules, dateISO, now })),
+    courts: courts.map((court) =>
+      computeCourtDay({
+        court: { ...court, bookings: court.bookings.map((b) => ({ id: b.id, startsAt: b.startsAt, endsAt: b.endsAt, playerId: b.playerId, label: staff ? (b.player?.name ?? b.guestName ?? b.confirmationCode) : undefined })) },
+        viewerId: a.id,
+        location: { timezone: location.timezone, status: location.status, openingHours, bookingPolicy: location.bookingPolicy },
+        rules,
+        dateISO,
+        now,
+      }),
+    ),
   };
 }
