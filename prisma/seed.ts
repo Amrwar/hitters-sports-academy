@@ -59,6 +59,9 @@ const USERS: SeedUser[] = [
   { email: "karim@example.com", name: "Karim Adel", phone: "+201000000004", level: "C", home: "new-cairo", verified: true },
   { email: "salma@example.com", name: "Salma Youssef", phone: "+201000000005", level: "A", home: "new-cairo", verified: true },
   { email: "youssef@example.com", name: "Youssef Tarek", phone: "+201000000006", home: "sheikh-zayed", verified: false },
+  // Deliberately in no game and on no waitlist, so matchmaking can be tried from a clean Level A account.
+  { email: "nadia@example.com", name: "Nadia Kamal", phone: "+201000000007", level: "A", home: "new-cairo", verified: true },
+  { email: "hana@example.com", name: "Hana Sherif", phone: "+201000000008", level: "C", home: "maadi", verified: true },
 ];
 
 async function main() {
