@@ -109,8 +109,32 @@
   },
   {
     "name": "player-play",
-    "caption": "Matchmaking screen (sample data until the matchmaking phase).",
+    "caption": "Play: invitations with one-tap accept or decline, then my upcoming games.",
     "file": "docs/screenshots/player-play.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-play-discover",
+    "caption": "Discover: public open games with free spots, filtered by level, club and day.",
+    "file": "docs/screenshots/player-play-discover.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-game-invite",
+    "caption": "Game as an invited player: lineup, spots, levels, cost, accept or decline.",
+    "file": "docs/screenshots/player-game-invite.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-game-organizer",
+    "caption": "Game as the organizer: publish, invite, discoverable and open-spots switches, edit, cancel.",
+    "file": "docs/screenshots/player-game-organizer.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-game-new",
+    "caption": "Organize a game: pick a booking, format, levels, invitations, visibility and cost.",
+    "file": "docs/screenshots/player-game-new.png",
     "viewport": "phone"
   },
   {
@@ -189,6 +213,12 @@
     "name": "admin-staff",
     "caption": "Staff roles per location with grant and revoke.",
     "file": "docs/screenshots/admin-staff.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-games",
+    "caption": "Games across the staff member's locations: lineup, levels, cost, status, cancel.",
+    "file": "docs/screenshots/admin-games.png",
     "viewport": "desktop"
   }
 ]

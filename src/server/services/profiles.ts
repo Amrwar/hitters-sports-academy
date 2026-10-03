@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { conflict, forbidden, notFound, validation } from "@/lib/errors";
 import { accessibleLocationIds, can, requireActor, type Actor } from "@/lib/auth/authorize";
-import { fieldErrors, updateProfileSchema } from "@/lib/validation/schemas";
+import { fieldErrors, playerSearchSchema, updateProfileSchema } from "@/lib/validation/schemas";
 import { normalisePhone } from "./auth";
 import { bookingSelect } from "./bookings";
 
@@ -128,4 +128,26 @@ export async function getPlayerHistory(actor: Actor | null, profileId: string, t
     db.trainingRecord.findMany({ where: { playerProfileId: profileId }, include: { location: { select: { name: true } }, trainer: { select: { name: true } } }, orderBy: { heldAt: "desc" }, take }),
   ]);
   return { bookings, matches, training };
+}
+
+export type PlayerHit = { id: string; name: string; level: "A" | "B" | "C" | "D" | null; photoUrl: string | null; homeLocation: string | null };
+
+/** Finds active members by name or email for invitations. Private profiles and the caller are never returned. */
+export async function searchPlayers(actor: Actor | null, input: unknown): Promise<PlayerHit[]> {
+  const a = await requireActor(actor);
+  const parsed = playerSearchSchema.safeParse(input);
+  if (!parsed.success) return [];
+  const { q, take } = parsed.data;
+  const rows = await db.user.findMany({
+    where: {
+      status: "ACTIVE",
+      id: { not: a.id },
+      OR: [{ name: { contains: q, mode: "insensitive" } }, { email: { equals: q.toLowerCase() } }],
+      playerProfile: { visibility: { not: "PRIVATE" } },
+    },
+    select: { id: true, name: true, playerProfile: { select: { level: true, photoUrl: true, homeLocation: { select: { name: true } } } } },
+    orderBy: { name: "asc" },
+    take,
+  });
+  return rows.map((u) => ({ id: u.id, name: u.name, level: u.playerProfile?.level ?? null, photoUrl: u.playerProfile?.photoUrl ?? null, homeLocation: u.playerProfile?.homeLocation?.name ?? null }));
 }

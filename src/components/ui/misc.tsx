@@ -53,7 +53,7 @@ export function Switch({ checked, onChange, label, description, disabled, classN
           checked ? "border-blue-300/40 bg-brand-gradient shadow-glow-sm" : "border-line/15 bg-surface-3",
         )}
       >
-        <span className={cn("absolute top-0.5 size-5.5 h-[22px] w-[22px] rounded-full bg-white shadow-sm transition-transform duration-200", checked ? "translate-x-[22px]" : "translate-x-0.5")} />
+        <span className={cn("absolute left-0 top-0.5 h-[22px] w-[22px] rounded-full bg-white shadow-sm transition-transform duration-200", checked ? "translate-x-[22px]" : "translate-x-0.5")} />
       </button>
     </label>
   );

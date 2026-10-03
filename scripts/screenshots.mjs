@@ -20,7 +20,10 @@ async function shot(page, name, caption, opts = {}) {
   await page.evaluate(() => document.fonts?.ready);
   await sleep(opts.settle ?? 600);
   const file = path.join(OUT, `${name}.png`);
+  // A fixed bottom bar would be painted mid-page in a full-page capture; hide it for the shot.
+  if (opts.fullPage) await page.evaluate(() => document.querySelectorAll('nav[aria-label="Primary"]').forEach((n) => (n.style.display = "none")));
   await page.screenshot({ path: file, fullPage: opts.fullPage ?? false });
+  if (opts.fullPage) await page.evaluate(() => document.querySelectorAll('nav[aria-label="Primary"]').forEach((n) => (n.style.display = "")));
   manifest.push({ name, caption, file: `docs/screenshots/${name}.png`, viewport: opts.viewport });
   console.log("captured", name);
 }
@@ -43,6 +46,18 @@ async function logout(page) {
   await go(page, "/app/profile?tab=settings");
   await page.evaluate(() => document.querySelector("form[action] button[type=submit]")?.closest("form")?.requestSubmit());
   await sleep(2500);
+}
+
+// Each run books a slot for the demo player; drop earlier script-made bookings so the player's booking limit is never hit.
+{
+  const { PrismaClient } = await import("@prisma/client");
+  const prisma = new PrismaClient();
+  const amr = await prisma.user.findUnique({ where: { email: "amr@example.com" }, select: { id: true } });
+  if (amr) {
+    const gone = await prisma.booking.deleteMany({ where: { playerId: amr.id, confirmationCode: { not: { startsWith: "HT-SEED" } }, startsAt: { gt: new Date() } } });
+    console.log(`cleanup: removed ${gone.count} script bookings`);
+  }
+  await prisma.$disconnect();
 }
 
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: "new", args: ["--no-sandbox", "--disable-gpu", "--hide-scrollbars"] });
@@ -107,7 +122,15 @@ try {
   await go(page, "/app/notifications");
   await shot(page, "player-notifications", "In-app notifications: bookings, assessments and staff updates.", { viewport: "phone" });
   await go(page, "/app/play");
-  await shot(page, "player-play", "Matchmaking screen (sample data until the matchmaking phase).", { viewport: "phone" });
+  await shot(page, "player-play", "Play: invitations with one-tap accept or decline, then my upcoming games.", { viewport: "phone" });
+  await go(page, "/app/play?tab=discover");
+  await shot(page, "player-play-discover", "Discover: public open games with free spots, filtered by level, club and day.", { viewport: "phone" });
+  await go(page, "/app/play/GM-SEED01");
+  await shot(page, "player-game-invite", "Game as an invited player: lineup, spots, levels, cost, accept or decline.", { viewport: "phone", fullPage: true });
+  await go(page, "/app/play/GM-SEED02");
+  await shot(page, "player-game-organizer", "Game as the organizer: publish, invite, discoverable and open-spots switches, edit, cancel.", { viewport: "phone", fullPage: true });
+  await go(page, "/app/play/new");
+  await shot(page, "player-game-new", "Organize a game: pick a booking, format, levels, invitations, visibility and cost.", { viewport: "phone", fullPage: true });
   await go(page, "/app/programs");
   await shot(page, "player-programs", "Academy programs (sample data until the academy phase).", { viewport: "phone" });
   await logout(page);
@@ -148,6 +171,8 @@ try {
   await shot(page, "admin-levels", "Configurable level definitions: rank, label and description.", { viewport: "desktop" });
   await go(page, "/admin/staff");
   await shot(page, "admin-staff", "Staff roles per location with grant and revoke.", { viewport: "desktop" });
+  await go(page, "/admin/games");
+  await shot(page, "admin-games", "Games across the staff member's locations: lineup, levels, cost, status, cancel.", { viewport: "desktop" });
   await page.close();
 } finally {
   await browser.close();

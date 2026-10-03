@@ -12,7 +12,10 @@ export type ErrorCode =
   | "BOOKING_CONFLICT"
   | "CANCELLATION_NOT_ALLOWED"
   | "INVALID_DURATION"
-  | "LOCATION_CLOSED";
+  | "LOCATION_CLOSED"
+  // Game sessions
+  | "SESSION_FULL"
+  | "INVALID_TRANSITION";
 
 const STATUS: Record<ErrorCode, number> = {
   UNAUTHENTICATED: 401,
@@ -28,6 +31,8 @@ const STATUS: Record<ErrorCode, number> = {
   CANCELLATION_NOT_ALLOWED: 403,
   INVALID_DURATION: 400,
   LOCATION_CLOSED: 409,
+  SESSION_FULL: 409,
+  INVALID_TRANSITION: 409,
 };
 
 /** Domain error carried from services to actions and route handlers. */

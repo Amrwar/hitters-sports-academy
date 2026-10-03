@@ -308,3 +308,52 @@ export const bookingListSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(100),
 });
+
+/* ------------------------------------------------------------------ Game sessions (phase: games) */
+
+const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal("").transform(() => undefined));
+
+export const gameFormatSchema = z.enum(["SINGLES", "DOUBLES", "OPEN"]);
+export const gameVisibilitySchema = z.enum(["PRIVATE", "PUBLIC"]);
+export const gameCostModeSchema = z.enum(["FREE", "SPLIT_EVENLY", "ORGANIZER_PAYS", "FIXED_PER_PLAYER"]);
+export const gameStatusSchema = z.enum(["DRAFT", "OPEN", "FULL", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]);
+
+const gameDetails = z.object({
+  format: gameFormatSchema.default("DOUBLES"),
+  maxPlayers: z.coerce.number().int().min(2).max(16).optional(),
+  levels: z.array(levelSchema).max(4).default([]),
+  matchType: z.enum(["FRIENDLY", "COMPETITIVE", "ANY"]).default("ANY"),
+  visibility: gameVisibilitySchema.default("PRIVATE"),
+  openToRequests: z.coerce.boolean().default(false),
+  costMode: gameCostModeSchema.default("SPLIT_EVENLY"),
+  costPerPlayerCents: z.coerce.number().int().min(0).max(1_000_000).nullable().optional(),
+  description: optionalText(500),
+  notes: optionalText(500),
+});
+
+const fixedCostNeedsAmount = (v: { costMode?: string; costPerPlayerCents?: number | null }, ctx: z.RefinementCtx) => {
+  if (v.costMode === "FIXED_PER_PLAYER" && (v.costPerPlayerCents ?? 0) <= 0) ctx.addIssue({ code: "custom", path: ["costPerPlayerCents"], message: "Enter the amount each player pays." });
+};
+
+export const createGameSessionSchema = gameDetails.extend({ bookingId: z.string().cuid(), inviteUserIds: z.array(z.string().cuid()).max(15).default([]) }).superRefine(fixedCostNeedsAmount);
+export const updateGameSessionSchema = gameDetails.partial().superRefine(fixedCostNeedsAmount);
+
+export const inviteToGameSchema = z.object({ userIds: z.array(z.string().cuid()).min(1).max(15) });
+export const cancelGameSchema = z.object({ reason: optionalText(500) });
+
+export const gameDiscoverSchema = z.object({
+  locationId: z.string().cuid().optional(),
+  level: levelSchema.optional(),
+  dateISO: dateISOSchema.optional(),
+  take: z.coerce.number().int().min(1).max(100).default(50),
+});
+
+export const gameListSchema = z.object({
+  locationId: z.string().cuid().optional(),
+  status: gameStatusSchema.optional(),
+  scope: z.enum(["upcoming", "all"]).default("upcoming"),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(100),
+});
+
+export const playerSearchSchema = z.object({ q: z.string().trim().min(2).max(80), take: z.coerce.number().int().min(1).max(20).default(8) });

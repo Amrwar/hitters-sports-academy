@@ -18,6 +18,7 @@ import {
   Menu,
   Search,
   Settings,
+  Swords,
   Users,
   UserSquare2,
   X,
@@ -45,6 +46,7 @@ const groups: { label: string; items: { href: string; label: string; icon: typeo
     items: [
       { href: "/admin/bookings", label: "Bookings", icon: CalendarDays },
       { href: "/admin/calendar", label: "Calendar", icon: CalendarRange },
+      { href: "/admin/games", label: "Games", icon: Swords },
       { href: "/admin/courts", label: "Courts", icon: LayoutGrid },
       { href: "/admin/locations", label: "Locations", icon: MapPin },
     ],

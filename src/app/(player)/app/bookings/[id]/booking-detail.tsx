@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, MapPin, Navigation, Receipt, Users, XCircle } from "lucide-react";
+import { CalendarClock, MapPin, Navigation, Receipt, Swords, Users, XCircle } from "lucide-react";
 import { PageHeader } from "@/components/nav/player-nav";
 import { Button } from "@/components/ui/button";
 import { Card, SectionHeader } from "@/components/ui/card";
@@ -129,9 +129,28 @@ export function BookingDetail({ booking, viewerId }: { booking: BookingView; vie
               </div>
             </Card>
           ))}
-          <Card variant="outline" padding="sm" className="text-center text-caption text-fg-subtle">
-            Matchmaking will fill the remaining spots in a later release.
-          </Card>
+          {booking.gameSession ? (
+            <Card variant="interactive" padding="sm" href={`/app/play/${booking.gameSession.code}`}>
+              <div className="flex items-center gap-3">
+                <span className="flex size-9 items-center justify-center rounded-md bg-blue-500/15 text-blue-300 ring-1 ring-inset ring-blue-400/20">
+                  <Swords size={18} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-body-sm font-bold">Game {booking.gameSession.code}</div>
+                  <div className="text-caption capitalize text-fg-muted">{booking.gameSession.status.toLowerCase().replace("_", " ")} · {booking.gameSession.maxPlayers} players</div>
+                </div>
+                <span className="text-caption font-semibold text-blue-300">Open</span>
+              </div>
+            </Card>
+          ) : canChange && isOwner ? (
+            <Button variant="secondary" fullWidth leftIcon={<Swords />} href={`/app/play/new?booking=${booking.id}`}>
+              Organize a game on this court
+            </Button>
+          ) : (
+            <Card variant="outline" padding="sm" className="text-center text-caption text-fg-subtle">
+              No game has been organized on this booking.
+            </Card>
+          )}
         </div>
       </section>
 

@@ -1,11 +1,11 @@
 /**
  * Development seed. Idempotent: safe to run repeatedly.
  * Creates the permission matrix, four locations with courts and availability, one account per role,
- * sample players with assessments, and a few notifications.
+ * sample players with assessments, demo bookings with games, and a few notifications.
  *
  * All seeded accounts share the development password below. Change it before any shared deployment.
  */
-import { PrismaClient, type CourtType, type PlayerLevel, type StaffRole } from "@prisma/client";
+import { PrismaClient, type CourtType, type PlayerLevel, type Prisma, type StaffRole } from "@prisma/client";
 import { hashPassword } from "../src/lib/auth/password";
 import { seedRolePermissions } from "../src/server/services/permissions-seed";
 import { DEFAULT_LEVELS } from "../src/server/services/levels";
@@ -137,6 +137,59 @@ async function main() {
   if ((await db.assessmentRequest.count({ where: { playerProfileId: youssef.id } })) === 0) {
     await db.assessmentRequest.create({ data: { playerProfileId: youssef.id, locationId: locationIds.get("sheikh-zayed")!, kind: "INITIAL", note: "New to padel, played squash before." } });
   }
+  // Demo bookings and games so the Play tab, home and admin lists have content. Dates are relative to now.
+  const zonedUtc = (daysAhead: number, hour: number) => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() + daysAhead);
+    d.setUTCHours(hour - 2, 0, 0, 0); // Africa/Cairo is UTC+2 for the seeded clubs
+    return d;
+  };
+  const courtAt = async (slug: string, name: string) => (await db.court.findFirstOrThrow({ where: { locationId: locationIds.get(slug)!, name } })).id;
+  const ensureBooking = async (code: string, email: string, slug: string, court: string, daysAhead: number, hour: number, minutes: number, priceCents: number) => {
+    const startsAt = zonedUtc(daysAhead, hour);
+    const endsAt = new Date(startsAt.getTime() + minutes * 60_000);
+    const playerId = userIds.get(email)!;
+    const courtId = await courtAt(slug, court);
+    const existing = await db.booking.findUnique({ where: { confirmationCode: code } });
+    if (existing) return existing;
+    return db.booking.create({
+      data: { confirmationCode: code, courtId, locationId: locationIds.get(slug)!, playerId, startsAt, endsAt, durationMinutes: minutes, status: "CONFIRMED", priceCents, createdById: playerId, participants: { create: [{ userId: playerId, role: "ORGANIZER" }] }, payments: { create: { amountCents: priceCents, status: "PENDING", method: "NONE" } } },
+    });
+  };
+  const ensureGame = async (code: string, bookingId: string, email: string, data: Omit<Prisma.GameSessionUncheckedCreateInput, "code" | "bookingId" | "organizerId" | "locationId" | "courtId" | "startsAt" | "endsAt">, lineup: { email: string; status: "ACCEPTED" | "INVITED" }[]) => {
+    if (await db.gameSession.findUnique({ where: { code } })) return;
+    const b = await db.booking.findUniqueOrThrow({ where: { id: bookingId } });
+    const organizerId = userIds.get(email)!;
+    await db.gameSession.create({
+      data: {
+        code,
+        bookingId,
+        organizerId,
+        locationId: b.locationId,
+        courtId: b.courtId,
+        startsAt: b.startsAt,
+        endsAt: b.endsAt,
+        ...data,
+        participants: { create: [{ userId: organizerId, role: "ORGANIZER", status: "ACCEPTED", invitedById: organizerId, respondedAt: new Date() }, ...lineup.map((l) => ({ userId: userIds.get(l.email)!, role: "PLAYER" as const, status: l.status, invitedById: organizerId, respondedAt: l.status === "ACCEPTED" ? new Date() : null }))] },
+      },
+    });
+    for (const l of lineup) {
+      if (l.status === "INVITED") await db.notification.create({ data: { userId: userIds.get(l.email)!, type: "game.invited", title: `${USERS.find((u) => u.email === email)!.name} invited you to a game`, body: `${LOCATIONS.find((x) => x.slug === (LOCATIONS.find((y) => locationIds.get(y.slug) === b.locationId)?.slug ?? "new-cairo"))!.name}`, data: { code } } });
+    }
+  };
+  const bOmar = await ensureBooking("HT-SEED01", "omar@example.com", "new-cairo", "Court 1", 1, 19, 90, 67500);
+  const bAmr = await ensureBooking("HT-SEED02", "amr@example.com", "new-cairo", "Court 3", 2, 20, 60, 45000);
+  const bLaila = await ensureBooking("HT-SEED03", "laila@example.com", "sheikh-zayed", "Court 2", 3, 18, 90, 75000);
+  const bSalma = await ensureBooking("HT-SEED04", "salma@example.com", "maadi", "Court 1", 4, 9, 60, 40000);
+  await ensureGame("GM-SEED01", bOmar.id, "omar@example.com", { format: "DOUBLES", maxPlayers: 4, levels: ["A", "B"], matchType: "COMPETITIVE", visibility: "PUBLIC", status: "OPEN", openToRequests: true, costMode: "SPLIT_EVENLY", description: "Tuesday night doubles, fast pace", notes: "Meet at reception 10 minutes early. I bring balls.", publishedAt: new Date() }, [
+    { email: "salma@example.com", status: "ACCEPTED" },
+    { email: "amr@example.com", status: "INVITED" },
+  ]);
+  await ensureGame("GM-SEED02", bAmr.id, "amr@example.com", { format: "DOUBLES", maxPlayers: 4, levels: ["B", "C"], matchType: "FRIENDLY", visibility: "PRIVATE", status: "DRAFT", costMode: "SPLIT_EVENLY", description: "Friendly doubles after work" }, [{ email: "karim@example.com", status: "INVITED" }]);
+  await ensureGame("GM-SEED03", bLaila.id, "laila@example.com", { format: "DOUBLES", maxPlayers: 4, levels: ["B"], matchType: "ANY", visibility: "PUBLIC", status: "OPEN", openToRequests: true, costMode: "FIXED_PER_PLAYER", costPerPlayerCents: 20000, description: "Zayed Thursday doubles", publishedAt: new Date() }, []);
+  await ensureGame("GM-SEED04", bSalma.id, "salma@example.com", { format: "SINGLES", maxPlayers: 2, levels: ["A"], matchType: "COMPETITIVE", visibility: "PUBLIC", status: "FULL", costMode: "ORGANIZER_PAYS", description: "Morning singles, Maadi", publishedAt: new Date() }, [{ email: "omar@example.com", status: "ACCEPTED" }]);
+  console.log("games: done");
+
   console.log(`\nSeed complete. Sign in with any seeded email and the development password defined in prisma/seed.ts.`);
 }
 

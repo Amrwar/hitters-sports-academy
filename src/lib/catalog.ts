@@ -71,6 +71,38 @@ export const TRAINING_KINDS = [
   { value: "ASSESSMENT", label: "Assessment" },
 ] as const;
 
+/** Game formats. The player count is stored per session, so a new format only needs a row here. */
+export const GAME_FORMATS = [
+  { value: "DOUBLES", label: "Doubles", players: 4, hint: "Standard 2 v 2" },
+  { value: "SINGLES", label: "Singles", players: 2, hint: "1 v 1" },
+  { value: "OPEN", label: "Open", players: 8, hint: "Americano, clinic or social: choose the player count" },
+] as const;
+export type GameFormatKey = (typeof GAME_FORMATS)[number]["value"];
+export const gameFormatLabel = (value: string) => GAME_FORMATS.find((f) => f.value === value)?.label ?? value;
+
+export const GAME_VISIBILITY = [
+  { value: "PRIVATE", label: "Private", hint: "Only invited players can see it" },
+  { value: "PUBLIC", label: "Discoverable", hint: "Listed in Play for players at this club" },
+] as const;
+
+export const GAME_COST_MODES = [
+  { value: "SPLIT_EVENLY", label: "Split the court", hint: "Court price divided by the players" },
+  { value: "FIXED_PER_PLAYER", label: "Fixed per player", hint: "You set the amount" },
+  { value: "ORGANIZER_PAYS", label: "On me", hint: "The organizer covers the court" },
+  { value: "FREE", label: "Free", hint: "No cost to anyone" },
+] as const;
+export const gameCostLabel = (value: string) => GAME_COST_MODES.find((c) => c.value === value)?.label ?? value;
+
+export const GAME_STATUSES = [
+  { value: "DRAFT", label: "Draft" },
+  { value: "OPEN", label: "Open" },
+  { value: "FULL", label: "Full" },
+  { value: "CONFIRMED", label: "Confirmed" },
+  { value: "IN_PROGRESS", label: "In progress" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "CANCELLED", label: "Cancelled" },
+] as const;
+
 export const DURATION_OPTIONS = [30, 60, 90, 120, 150, 180] as const;
 
 export const TIMEZONES = ["Africa/Cairo", "Asia/Dubai", "Asia/Riyadh", "Europe/Madrid", "Europe/London", "America/New_York"] as const;

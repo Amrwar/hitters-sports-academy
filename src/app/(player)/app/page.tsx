@@ -3,10 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Card, SectionHeader } from "@/components/ui/card";
 import { Badge, LevelBadge } from "@/components/ui/badge";
 import { StatTile } from "@/components/ui/misc";
-import { MatchCard, ProgramCard, QuickAction } from "@/components/patterns/cards";
+import { ProgramCard, QuickAction } from "@/components/patterns/cards";
 import { BookingRow } from "@/components/patterns/booking-row";
-import { matches, programs } from "@/data/mock";
+import { GameCard } from "@/components/patterns/game-card";
+import { programs } from "@/data/mock";
 import { listMyBookings } from "@/server/services/bookings";
+import { discoverGames, listMyGames } from "@/server/services/game-sessions";
 import { formatInZone } from "@/lib/time";
 import { requireActorOrRedirect } from "@/lib/auth/cookies";
 import { getMyProfile } from "@/server/services/profiles";
@@ -18,11 +20,17 @@ function greeting() {
 
 export default async function PlayerDashboard() {
   const actor = await requireActorOrRedirect("/app");
-  const [profile, upcoming] = await Promise.all([getMyProfile(actor), listMyBookings(actor, "upcoming")]);
-  // Sessions and programs are still mock data until those phases ship.
+  const [profile, upcoming, myGames, discoverable] = await Promise.all([getMyProfile(actor), listMyBookings(actor, "upcoming"), listMyGames(actor, "upcoming"), discoverGames(actor, { take: 20 })]);
+  // Programs are still sample data until the academy phase ships.
   const next = upcoming[0];
-  const live = matches.find((m) => m.status === "live");
-  const open = matches.filter((m) => m.status === "open").slice(0, 2);
+  const live = myGames.find((g) => g.status === "IN_PROGRESS") ?? null;
+  const invitations = myGames.filter((g) => g.participants.some((p) => p.userId === actor.id && p.status === "INVITED"));
+  const nextGame = myGames.find((g) => g.status !== "IN_PROGRESS" && !invitations.includes(g)) ?? null;
+  const preferred = new Set([profile.homeLocationId, ...profile.preferredLocations.map((l) => l.id)].filter(Boolean));
+  const open = discoverable
+    .filter((g) => g.organizerId !== actor.id && !g.participants.some((p) => p.userId === actor.id))
+    .sort((a, b) => Number(preferred.has(b.locationId)) - Number(preferred.has(a.locationId)))
+    .slice(0, 2);
 
   return (
     <div className="space-y-7">
@@ -78,33 +86,62 @@ export default async function PlayerDashboard() {
 
       <div className="grid grid-cols-2 gap-3">
         <QuickAction href="/app/book" icon={<CalendarPlus />} label="Book a court" hint={upcoming.length ? upcoming.length + " upcoming" : "From EGP 400/h"} />
-        <QuickAction href="/app/play" icon={<Swords />} label="Find a match" hint="3 open near you" />
+        <QuickAction href="/app/play" icon={<Swords />} label="Play" hint={invitations.length ? `${invitations.length} invitation${invitations.length === 1 ? "" : "s"}` : open.length ? `${discoverable.length} open game${discoverable.length === 1 ? "" : "s"}` : "Organize a game"} />
         <QuickAction href="/app/trainers" icon={<UserSquare2 />} label="Private coach" hint="Certified trainers" />
         <QuickAction href="/app/programs" icon={<GraduationCap />} label="Programs" hint="New intake Oct" />
       </div>
 
       {live && (
         <section>
-          <SectionHeader eyebrow="Happening now" title="Live at your club" />
-          <MatchCard match={live} />
+          <SectionHeader eyebrow="Happening now" title="Your game is on" />
+          <GameCard game={live} viewerId={actor.id} href={`/app/play/${live.code}`} />
+        </section>
+      )}
+
+      {(invitations.length > 0 || nextGame) && (
+        <section>
+          <SectionHeader
+            eyebrow="Games"
+            title={invitations.length ? `${invitations.length} invitation${invitations.length === 1 ? "" : "s"} waiting` : "Your next game"}
+            action={
+              <Button variant="link" size="sm" href="/app/play" rightIcon={<ArrowRight />}>
+                My games
+              </Button>
+            }
+          />
+          <div className="space-y-3">
+            {invitations.slice(0, 2).map((g) => (
+              <GameCard key={g.id} game={g} viewerId={actor.id} href={`/app/play/${g.code}`} />
+            ))}
+            {invitations.length === 0 && nextGame && <GameCard game={nextGame} viewerId={actor.id} href={`/app/play/${nextGame.code}`} />}
+          </div>
         </section>
       )}
 
       <section>
         <SectionHeader
-          eyebrow="Matchmaking"
-          title="Open sessions for you"
+          eyebrow="Discover"
+          title="Open games for you"
           action={
-            <Button variant="link" size="sm" href="/app/play" rightIcon={<ArrowRight />}>
+            <Button variant="link" size="sm" href="/app/play?tab=discover" rightIcon={<ArrowRight />}>
               See all
             </Button>
           }
         />
-        <div className="space-y-3">
-          {open.map((m) => (
-            <MatchCard key={m.id} match={m} />
-          ))}
-        </div>
+        {open.length ? (
+          <div className="space-y-3">
+            {open.map((g) => (
+              <GameCard key={g.id} game={g} viewerId={actor.id} href={`/app/play/${g.code}`} />
+            ))}
+          </div>
+        ) : (
+          <Card variant="outline" padding="md" className="flex items-center justify-between gap-3">
+            <span className="text-body-sm text-fg-muted">No open games at your clubs yet.</span>
+            <Button size="sm" variant="secondary" href="/app/play/new">
+              Organize one
+            </Button>
+          </Card>
+        )}
       </section>
 
       <section>

@@ -8,6 +8,7 @@ import { dayOfWeekISO, utcToZoned, zonedToUtc } from "@/lib/time";
 import { bookingListSchema, bookingRequestSchema, cancelBookingSchema, createBookingSchema, fieldErrors, recordPaymentSchema, type BookingRequest, type OpeningHours } from "@/lib/validation/schemas";
 import { quotePrice, type Quote } from "./pricing";
 import { notify } from "./notifications";
+import { cancelGameForBooking, moveGameToBooking, type GameCascade } from "./game-sessions";
 
 /* ------------------------------------------------------------------ Shared selects */
 
@@ -39,6 +40,7 @@ export const bookingSelect = {
   participants: { select: { id: true, role: true, status: true, guestName: true, user: { select: { id: true, name: true } } } },
   payments: { select: { id: true, amountCents: true, currency: true, status: true, method: true, paidAt: true }, orderBy: { createdAt: "desc" as const } },
   rescheduledTo: { select: { id: true, confirmationCode: true } },
+  gameSession: { select: { id: true, code: true, status: true, maxPlayers: true } },
 } satisfies Prisma.BookingSelect;
 
 export type BookingView = Prisma.BookingGetPayload<{ select: typeof bookingSelect }>;
@@ -344,15 +346,21 @@ export async function cancelBooking(actor: Actor | null, bookingId: string, inpu
   const booking = await loadBooking(bookingId);
   const { staff } = await assertCanChange(a, booking, now, "cancel");
 
+  let game = null as GameCascade | null;
   const updated = await db.$transaction(async (tx) => {
     await tx.booking.update({ where: { id: bookingId }, data: { status: "CANCELLED", cancelledAt: now, cancelledById: a.id, cancellationReason: parsed.data.reason } });
     await tx.payment.updateMany({ where: { bookingId, status: "PAID" }, data: { status: "REFUNDED", refundedAt: now } });
     await tx.payment.updateMany({ where: { bookingId, status: "PENDING" }, data: { status: "CANCELLED" } });
+    game = await cancelGameForBooking(tx, bookingId, a.id, now);
     await audit({ actorId: a.id, action: "booking.cancelled", entityType: "Booking", entityId: bookingId, locationId: booking.locationId, metadata: { byStaff: staff && booking.playerId !== a.id, reason: parsed.data.reason } }, tx);
     return tx.booking.findUniqueOrThrow({ where: { id: bookingId }, select: bookingSelect });
   });
   if (booking.playerId && booking.playerId !== a.id) {
     await notify(booking.playerId, { type: "booking.cancelled", title: `Booking ${booking.confirmationCode} cancelled`, body: parsed.data.reason ? `Reason: ${parsed.data.reason}` : `${booking.location.name} cancelled your booking.`, data: { bookingId } });
+  }
+  if (game) {
+    const g: GameCascade = game;
+    await Promise.all(g.userIds.map((userId) => notify(userId, { type: "game.cancelled", title: "Game cancelled", body: `The court booking for ${g.code} at ${booking.location.name} was cancelled.`, data: { gameId: g.gameId, code: g.code } })));
   }
   return updated;
 }
@@ -369,6 +377,7 @@ export async function rescheduleBooking(actor: Actor | null, bookingId: string, 
   if (!newCourt) throw notFound("Court");
   if (newCourt.locationId !== old.locationId) throw validation("Rescheduling must stay within the same location.");
   const slot = await validateSlot(parsed.data, { now, staff, excludeBookingId: old.id });
+  let movedGame = null as GameCascade | null;
 
   try {
     const created = await db.$transaction(
@@ -405,6 +414,7 @@ export async function rescheduleBooking(actor: Actor | null, bookingId: string, 
         });
         if (paid) await tx.payment.update({ where: { id: paid.id }, data: { bookingId: b.id } });
         await tx.payment.updateMany({ where: { bookingId: old.id, status: "PENDING" }, data: { status: "CANCELLED" } });
+        movedGame = await moveGameToBooking(tx, old.id, { id: b.id, courtId: b.courtId, startsAt: b.startsAt, endsAt: b.endsAt }, a.id);
         await audit({ actorId: a.id, action: "booking.rescheduled", entityType: "Booking", entityId: b.id, locationId: old.locationId, metadata: { from: old.id, fromStartsAt: old.startsAt, toStartsAt: slot.startsAt, courtId: parsed.data.courtId } }, tx);
         return tx.booking.findUniqueOrThrow({ where: { id: b.id }, select: bookingSelect });
       },
@@ -412,6 +422,10 @@ export async function rescheduleBooking(actor: Actor | null, bookingId: string, 
     );
     if (created.playerId && created.playerId !== a.id) {
       await notify(created.playerId, { type: "booking.rescheduled", title: `Booking moved · ${created.confirmationCode}`, body: `${created.location.name} moved your session to ${created.court.name}.`, data: { bookingId: created.id } });
+    }
+    if (movedGame) {
+      const g: GameCascade = movedGame;
+      await Promise.all(g.userIds.map((userId) => notify(userId, { type: "game.moved", title: `Game ${g.code} moved`, body: `${created.location.name} · ${created.court.name} · ${utcToZoned(created.startsAt, created.location.timezone).dateISO}`, data: { gameId: g.gameId, code: g.code } })));
     }
     return created;
   } catch (e) {

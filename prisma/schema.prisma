@@ -1,5 +1,5 @@
 // HITTERS Sports Academy - core data model (phase: foundation, auth, authorization).
-// Booking, matchmaking, programs and payments are added in later phases.
+// Matchmaking (join requests), programs and payments are added in later phases.
 
 generator client {
   provider = "prisma-client-js"
@@ -182,6 +182,59 @@ enum NotificationStatus {
   FAILED
 }
 
+// ---------------------------------------------------------------- Games (planned padel sessions)
+
+/// Player-count template. maxPlayers is stored per session so new formats need no schema change.
+enum GameFormat {
+  SINGLES
+  DOUBLES
+  OPEN
+}
+
+enum GameVisibility {
+  PRIVATE
+  PUBLIC
+}
+
+enum GameStatus {
+  DRAFT
+  OPEN
+  FULL
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum GameCostMode {
+  FREE
+  SPLIT_EVENLY
+  ORGANIZER_PAYS
+  FIXED_PER_PLAYER
+}
+
+enum GameParticipantRole {
+  ORGANIZER
+  PLAYER
+}
+
+enum GameParticipantStatus {
+  INVITED
+  ACCEPTED
+  DECLINED
+  LEFT
+  REMOVED
+}
+
+/// Reserved for the join-request phase; no rows are written yet.
+enum GameRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  WITHDRAWN
+  EXPIRED
+}
+
 // ---------------------------------------------------------------- Identity
 
 /// One account per person across all HITTERS locations.
@@ -199,21 +252,27 @@ model User {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
-  playerProfile      PlayerProfile?
-  sessions           Session[]
-  verificationTokens VerificationToken[]
-  memberships        StaffMembership[]   @relation("MembershipUser")
-  createdMemberships StaffMembership[]   @relation("MembershipCreatedBy")
-  assessmentsGiven   Assessment[]        @relation("AssessmentAssessor")
-  assessmentRequests AssessmentRequest[] @relation("RequestAssessor")
-  trainingGiven      TrainingRecord[]    @relation("TrainingTrainer")
-  trainingRecorded   TrainingRecord[]    @relation("TrainingCreatedBy")
-  notifications      Notification[]
-  auditLogs          AuditLog[]
-  bookings           Booking[]           @relation("BookingPlayer")
-  createdBookings    Booking[]           @relation("BookingCreatedBy")
-  cancelledBookings  Booking[]           @relation("BookingCancelledBy")
-  participations     BookingParticipant[]
+  playerProfile       PlayerProfile?
+  sessions            Session[]
+  verificationTokens  VerificationToken[]
+  memberships         StaffMembership[]    @relation("MembershipUser")
+  createdMemberships  StaffMembership[]    @relation("MembershipCreatedBy")
+  assessmentsGiven    Assessment[]         @relation("AssessmentAssessor")
+  assessmentRequests  AssessmentRequest[]  @relation("RequestAssessor")
+  trainingGiven       TrainingRecord[]     @relation("TrainingTrainer")
+  trainingRecorded    TrainingRecord[]     @relation("TrainingCreatedBy")
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+  bookings            Booking[]            @relation("BookingPlayer")
+  createdBookings     Booking[]            @relation("BookingCreatedBy")
+  cancelledBookings   Booking[]            @relation("BookingCancelledBy")
+  participations      BookingParticipant[]
+  organizedGames      GameSession[]        @relation("GameOrganizer")
+  cancelledGames      GameSession[]        @relation("GameCancelledBy")
+  gameParticipations  GameParticipant[]    @relation("GameParticipantUser")
+  gameInvitesSent     GameParticipant[]    @relation("GameParticipantInvitedBy")
+  gameRequests        GameJoinRequest[]    @relation("GameRequestUser")
+  gameRequestsDecided GameJoinRequest[]    @relation("GameRequestDecidedBy")
 
   @@index([status])
   @@index([globalRole])
@@ -263,26 +322,26 @@ model RolePermission {
 // ---------------------------------------------------------------- Players
 
 model PlayerProfile {
-  id             String            @id @default(cuid())
-  userId         String            @unique
+  id             String              @id @default(cuid())
+  userId         String              @unique
   /// Official HITTERS level. Only set through the assessment workflow or a staff level change.
   level          PlayerLevel?
   levelUpdatedAt DateTime?
   /// What the player believes their level is; never used for official placement.
   selfLevel      PlayerLevel?
   photoUrl       String?
-  side           PlayerSide        @default(RIGHT)
+  side           PlayerSide          @default(RIGHT)
   matchType      MatchTypePreference @default(ANY)
-  playStyle      String?           @db.VarChar(80)
+  playStyle      String?             @db.VarChar(80)
   yearsPlaying   Int?
   /// Keys from PREFERRED_TIMES in src/lib/catalog.ts
-  preferredTimes String[]          @default([])
-  bio            String?           @db.VarChar(500)
-  dateOfBirth    DateTime?         @db.Date
+  preferredTimes String[]            @default([])
+  bio            String?             @db.VarChar(500)
+  dateOfBirth    DateTime?           @db.Date
   homeLocationId String?
-  visibility     ProfileVisibility @default(MEMBERS)
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  visibility     ProfileVisibility   @default(MEMBERS)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   homeLocation       Location?           @relation(fields: [homeLocationId], references: [id], onDelete: SetNull)
@@ -400,12 +459,13 @@ model Location {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
-  courts        Court[]
-  bookings      Booking[]
-  photos        LocationPhoto[]
-  bookingPolicy BookingPolicy?
-  pricingRules  PricingRule[]
-  memberships   StaffMembership[]
+  courts             Court[]
+  bookings           Booking[]
+  gameSessions       GameSession[]
+  photos             LocationPhoto[]
+  bookingPolicy      BookingPolicy?
+  pricingRules       PricingRule[]
+  memberships        StaffMembership[]
   assessments        Assessment[]
   assessmentRequests AssessmentRequest[]
   trainingRecords    TrainingRecord[]
@@ -499,6 +559,7 @@ model Court {
   closures     CourtClosure[]
   pricingRules PricingRule[]
   bookings     Booking[]
+  gameSessions GameSession[]
 
   @@unique([locationId, name])
   @@index([locationId, status])
@@ -576,6 +637,7 @@ model Booking {
   rescheduledTo   Booking?             @relation("Reschedule")
   participants    BookingParticipant[]
   payments        Payment[]
+  gameSession     GameSession?
 
   @@index([courtId, startsAt])
   @@index([locationId, startsAt])
@@ -620,6 +682,100 @@ model Payment {
 
   @@index([bookingId])
   @@index([status])
+}
+
+// ---------------------------------------------------------------- Games
+
+/// A planned padel game on a reserved court. The reservation (Booking) and the money (Payment) stay separate;
+/// the session owns who plays, how many spots exist and how they are filled.
+/// Capacity is enforced in the service inside a transaction that locks the session row (see game-sessions.ts).
+model GameSession {
+  id                 String              @id @default(cuid())
+  code               String              @unique
+  organizerId        String
+  bookingId          String              @unique
+  locationId         String
+  courtId            String
+  startsAt           DateTime
+  endsAt             DateTime
+  format             GameFormat          @default(DOUBLES)
+  /// Total players including the organizer. 4 for doubles; stored so future formats need no schema change.
+  maxPlayers         Int                 @default(4)
+  /// Official levels welcome. Empty = any level.
+  levels             PlayerLevel[]       @default([])
+  matchType          MatchTypePreference @default(ANY)
+  visibility         GameVisibility      @default(PRIVATE)
+  status             GameStatus          @default(DRAFT)
+  /// Remaining spots may be requested by players who were not invited (join requests ship next phase).
+  openToRequests     Boolean             @default(false)
+  costMode           GameCostMode        @default(SPLIT_EVENLY)
+  /// Set for FIXED_PER_PLAYER; for SPLIT_EVENLY the share is derived from the booking price.
+  costPerPlayerCents Int?
+  currency           String              @default("EGP")
+  description        String?             @db.VarChar(500)
+  /// Visible to participants only (meeting point, what to bring).
+  notes              String?             @db.VarChar(500)
+  publishedAt        DateTime?
+  confirmedAt        DateTime?
+  cancelledAt        DateTime?
+  cancelledById      String?
+  cancelReason       String?             @db.VarChar(500)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  organizer    User              @relation("GameOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
+  cancelledBy  User?             @relation("GameCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+  booking      Booking           @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  location     Location          @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  court        Court             @relation(fields: [courtId], references: [id], onDelete: Restrict)
+  participants GameParticipant[]
+  requests     GameJoinRequest[]
+
+  @@index([organizerId, startsAt(sort: Desc)])
+  @@index([locationId, startsAt])
+  @@index([status, visibility, startsAt])
+}
+
+/// Who is in a game. Invited players must accept themselves; nothing accepts on their behalf.
+model GameParticipant {
+  id          String                @id @default(cuid())
+  sessionId   String
+  userId      String
+  role        GameParticipantRole   @default(PLAYER)
+  status      GameParticipantStatus @default(INVITED)
+  invitedById String?
+  invitedAt   DateTime              @default(now())
+  respondedAt DateTime?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  session   GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user      User        @relation("GameParticipantUser", fields: [userId], references: [id], onDelete: Cascade)
+  invitedBy User?       @relation("GameParticipantInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@unique([sessionId, userId])
+  @@index([userId, status])
+}
+
+/// A player asking to join an open spot. Written by the join-request phase; organizers decide, never automation.
+model GameJoinRequest {
+  id          String            @id @default(cuid())
+  sessionId   String
+  userId      String
+  status      GameRequestStatus @default(PENDING)
+  message     String?           @db.VarChar(300)
+  decidedById String?
+  decidedAt   DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  session   GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user      User        @relation("GameRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+  decidedBy User?       @relation("GameRequestDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@unique([sessionId, userId])
+  @@index([sessionId, status])
+  @@index([userId, status])
 }
 
 // ---------------------------------------------------------------- Staff
