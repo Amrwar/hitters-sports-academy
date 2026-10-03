@@ -1,0 +1,194 @@
+[
+  {
+    "name": "marketing-landing",
+    "caption": "Marketing landing page: hero with the HITTERS lockup and the 3D monogram, locations, matchmaking, academy and membership sections.",
+    "file": "docs/screenshots/marketing-landing.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "auth-login",
+    "caption": "Sign-in screen with the brand panel.",
+    "file": "docs/screenshots/auth-login.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "auth-register",
+    "caption": "Account creation.",
+    "file": "docs/screenshots/auth-register.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "design-system",
+    "caption": "Living style guide: brand marks, colour tokens, typography, buttons, forms, cards, feedback, data and states.",
+    "file": "docs/screenshots/design-system.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "player-home",
+    "caption": "Player home: official level, next booking, quick actions, live and open sessions.",
+    "file": "docs/screenshots/player-home.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-locations",
+    "caption": "Clubs with live photos, open courts, today's hours and starting price.",
+    "file": "docs/screenshots/player-locations.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-location-detail",
+    "caption": "Club page: photos, description, hours, facilities, courts with today's availability, pricing rules.",
+    "file": "docs/screenshots/player-location-detail.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-book-grid",
+    "caption": "Book a court: club, date strip and the live court-by-hour grid with prices.",
+    "file": "docs/screenshots/player-book-grid.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-book-review",
+    "caption": "Slot selected: duration chips and the price review bar with the pricing-rule breakdown.",
+    "file": "docs/screenshots/player-book-review.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-book-confirm",
+    "caption": "Confirmation dialog with the total, venue payment note and cancellation policy.",
+    "file": "docs/screenshots/player-book-confirm.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-book-done",
+    "caption": "Booking confirmed with the confirmation code.",
+    "file": "docs/screenshots/player-book-done.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-booking-detail",
+    "caption": "Booking detail: time, court, directions, reschedule, payment status, players, cancellation window.",
+    "file": "docs/screenshots/player-booking-detail.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-bookings",
+    "caption": "My bookings: upcoming and history.",
+    "file": "docs/screenshots/player-bookings.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-profile",
+    "caption": "Profile overview: official level, preferences, clubs.",
+    "file": "docs/screenshots/player-profile.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-profile-level",
+    "caption": "Level tab: official level with description, request an assessment, level guide and history.",
+    "file": "docs/screenshots/player-profile-level.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-profile-history",
+    "caption": "History tab: bookings, matches and training.",
+    "file": "docs/screenshots/player-profile-history.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-profile-settings",
+    "caption": "Settings: photo, identity, playing preferences, preferred times and clubs, password.",
+    "file": "docs/screenshots/player-profile-settings.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-notifications",
+    "caption": "In-app notifications: bookings, assessments and staff updates.",
+    "file": "docs/screenshots/player-notifications.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-play",
+    "caption": "Matchmaking screen (sample data until the matchmaking phase).",
+    "file": "docs/screenshots/player-play.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-programs",
+    "caption": "Academy programs (sample data until the academy phase).",
+    "file": "docs/screenshots/player-programs.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "admin-dashboard",
+    "caption": "Admin dashboard: today's bookings, occupancy by hour, revenue, members.",
+    "file": "docs/screenshots/admin-dashboard.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-bookings",
+    "caption": "Bookings: filters, status, payment, row actions, manual booking.",
+    "file": "docs/screenshots/admin-bookings.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-calendar",
+    "caption": "Court calendar: courts by hour with prices, booked cells and block actions.",
+    "file": "docs/screenshots/admin-calendar.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-courts",
+    "caption": "Courts per location with status, template summary and maintenance toggle.",
+    "file": "docs/screenshots/admin-courts.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-court-detail",
+    "caption": "Court page: details, weekly operating hours with base rate, closures.",
+    "file": "docs/screenshots/admin-court-detail.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-locations",
+    "caption": "Locations overview.",
+    "file": "docs/screenshots/admin-locations.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-location-editor",
+    "caption": "Location editor: details, photos, opening hours, facilities, booking policy, pricing.",
+    "file": "docs/screenshots/admin-location-editor.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-location-pricing",
+    "caption": "Pricing rules: peak, weekend and membership adjustments layered over the base rate.",
+    "file": "docs/screenshots/admin-location-pricing.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-members",
+    "caption": "Members in scope with level, home club, roles and status.",
+    "file": "docs/screenshots/admin-members.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-assessments",
+    "caption": "Assessment queue: requests waiting, scheduled sessions, record results.",
+    "file": "docs/screenshots/admin-assessments.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-levels",
+    "caption": "Configurable level definitions: rank, label and description.",
+    "file": "docs/screenshots/admin-levels.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-staff",
+    "caption": "Staff roles per location with grant and revoke.",
+    "file": "docs/screenshots/admin-staff.png",
+    "viewport": "desktop"
+  }
+]

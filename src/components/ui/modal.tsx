@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { IconButton, Button } from "./button";
@@ -22,6 +23,8 @@ const sizes = { sm: "sm:max-w-sm", md: "sm:max-w-md", lg: "sm:max-w-2xl" };
 /** Dialog that behaves as a bottom sheet on mobile and a centered modal on larger screens. */
 export function Modal({ open, onClose, title, description, children, footer, size = "md", sheetOnMobile = true }: Props) {
   const id = useId();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     if (!open) return;
@@ -35,9 +38,10 @@ export function Modal({ open, onClose, title, description, children, footer, siz
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  // Portal to <body> so no animated or transformed ancestor can trap the overlay below fixed navigation.
+  return createPortal(
     <div className={cn("fixed inset-0 z-50 flex", sheetOnMobile ? "items-end sm:items-center" : "items-center", "justify-center sm:p-4")}>
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-navy-950/70 backdrop-blur-sm animate-fade-in" />
       <div
@@ -72,7 +76,8 @@ export function Modal({ open, onClose, title, description, children, footer, siz
         <div className="overflow-y-auto px-5 py-3 sm:px-6">{children}</div>
         {footer && <div className="flex flex-col-reverse gap-2 border-t border-line/10 px-5 py-4 safe-bottom sm:flex-row sm:justify-end sm:px-6">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

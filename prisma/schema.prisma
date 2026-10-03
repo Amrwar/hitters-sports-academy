@@ -63,6 +63,32 @@ enum PlayerSide {
   BOTH
 }
 
+enum AssessmentKind {
+  INITIAL
+  REASSESSMENT
+  LEVEL_CHANGE
+}
+
+enum AssessmentRequestStatus {
+  REQUESTED
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+enum MatchTypePreference {
+  FRIENDLY
+  COMPETITIVE
+  ANY
+}
+
+enum TrainingKind {
+  PRIVATE
+  PROGRAM
+  CLINIC
+  ASSESSMENT
+}
+
 enum ProfileVisibility {
   PUBLIC
   MEMBERS
@@ -179,6 +205,9 @@ model User {
   memberships        StaffMembership[]   @relation("MembershipUser")
   createdMemberships StaffMembership[]   @relation("MembershipCreatedBy")
   assessmentsGiven   Assessment[]        @relation("AssessmentAssessor")
+  assessmentRequests AssessmentRequest[] @relation("RequestAssessor")
+  trainingGiven      TrainingRecord[]    @relation("TrainingTrainer")
+  trainingRecorded   TrainingRecord[]    @relation("TrainingCreatedBy")
   notifications      Notification[]
   auditLogs          AuditLog[]
   bookings           Booking[]           @relation("BookingPlayer")
@@ -236,9 +265,18 @@ model RolePermission {
 model PlayerProfile {
   id             String            @id @default(cuid())
   userId         String            @unique
+  /// Official HITTERS level. Only set through the assessment workflow or a staff level change.
   level          PlayerLevel?
   levelUpdatedAt DateTime?
+  /// What the player believes their level is; never used for official placement.
+  selfLevel      PlayerLevel?
+  photoUrl       String?
   side           PlayerSide        @default(RIGHT)
+  matchType      MatchTypePreference @default(ANY)
+  playStyle      String?           @db.VarChar(80)
+  yearsPlaying   Int?
+  /// Keys from PREFERRED_TIMES in src/lib/catalog.ts
+  preferredTimes String[]          @default([])
   bio            String?           @db.VarChar(500)
   dateOfBirth    DateTime?         @db.Date
   homeLocationId String?
@@ -246,9 +284,12 @@ model PlayerProfile {
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  homeLocation Location?    @relation(fields: [homeLocationId], references: [id], onDelete: SetNull)
-  assessments  Assessment[]
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  homeLocation       Location?           @relation(fields: [homeLocationId], references: [id], onDelete: SetNull)
+  preferredLocations Location[]          @relation("PreferredLocations")
+  assessments        Assessment[]
+  assessmentRequests AssessmentRequest[]
+  trainingRecords    TrainingRecord[]
 
   @@index([level])
   @@index([homeLocationId])
@@ -256,24 +297,84 @@ model PlayerProfile {
 
 /// A/B/C/D placement performed by an assessor at a location. The latest assessment sets PlayerProfile.level.
 model Assessment {
-  id              String       @id @default(cuid())
+  id              String         @id @default(cuid())
   playerProfileId String
   assessorId      String
   locationId      String
+  kind            AssessmentKind @default(INITIAL)
   level           PlayerLevel
   previousLevel   PlayerLevel?
-  notes           String?      @db.VarChar(2000)
+  notes           String?        @db.VarChar(2000)
+  /// Internal notes visible to staff only.
+  staffNotes      String?        @db.VarChar(2000)
   scores          Json?
-  assessedAt      DateTime     @default(now())
-  createdAt       DateTime     @default(now())
+  assessedAt      DateTime       @default(now())
+  createdAt       DateTime       @default(now())
 
-  playerProfile PlayerProfile @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
-  assessor      User          @relation("AssessmentAssessor", fields: [assessorId], references: [id], onDelete: Restrict)
-  location      Location      @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  playerProfile PlayerProfile      @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
+  assessor      User               @relation("AssessmentAssessor", fields: [assessorId], references: [id], onDelete: Restrict)
+  location      Location           @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  request       AssessmentRequest? @relation("RequestResult")
 
   @@index([playerProfileId, assessedAt(sort: Desc)])
   @@index([locationId, assessedAt(sort: Desc)])
   @@index([assessorId])
+}
+
+/// Player-initiated assessment workflow: REQUESTED -> SCHEDULED -> COMPLETED (or CANCELLED).
+model AssessmentRequest {
+  id              String                  @id @default(cuid())
+  playerProfileId String
+  locationId      String
+  kind            AssessmentKind          @default(INITIAL)
+  status          AssessmentRequestStatus @default(REQUESTED)
+  note            String?                 @db.VarChar(500)
+  scheduledAt     DateTime?
+  assessorId      String?
+  assessmentId    String?                 @unique
+  cancelReason    String?                 @db.VarChar(500)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  playerProfile PlayerProfile @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
+  location      Location      @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  assessor      User?         @relation("RequestAssessor", fields: [assessorId], references: [id], onDelete: SetNull)
+  assessment    Assessment?   @relation("RequestResult", fields: [assessmentId], references: [id], onDelete: SetNull)
+
+  @@index([playerProfileId, status])
+  @@index([locationId, status, scheduledAt])
+}
+
+/// Admin-configurable meaning and ordering of the official levels. rank 1 is the strongest.
+model LevelDefinition {
+  level       PlayerLevel @id
+  rank        Int         @unique
+  label       String      @db.VarChar(40)
+  description String      @db.VarChar(500)
+  updatedAt   DateTime    @updatedAt
+}
+
+/// Training attended by a player (private sessions, programs, clinics). Recorded by trainers/managers.
+model TrainingRecord {
+  id              String       @id @default(cuid())
+  playerProfileId String
+  locationId      String?
+  trainerId       String?
+  kind            TrainingKind @default(PRIVATE)
+  title           String       @db.VarChar(120)
+  heldAt          DateTime
+  durationMinutes Int          @default(60)
+  notes           String?      @db.VarChar(1000)
+  createdById     String?
+  createdAt       DateTime     @default(now())
+
+  playerProfile PlayerProfile @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
+  location      Location?     @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  trainer       User?         @relation("TrainingTrainer", fields: [trainerId], references: [id], onDelete: SetNull)
+  createdBy     User?         @relation("TrainingCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([playerProfileId, heldAt(sort: Desc)])
+  @@index([locationId, heldAt(sort: Desc)])
 }
 
 // ---------------------------------------------------------------- Locations
@@ -305,9 +406,12 @@ model Location {
   bookingPolicy BookingPolicy?
   pricingRules  PricingRule[]
   memberships   StaffMembership[]
-  assessments   Assessment[]
-  homePlayers   PlayerProfile[]
-  auditLogs     AuditLog[]
+  assessments        Assessment[]
+  assessmentRequests AssessmentRequest[]
+  trainingRecords    TrainingRecord[]
+  homePlayers        PlayerProfile[]
+  preferredBy        PlayerProfile[]     @relation("PreferredLocations")
+  auditLogs          AuditLog[]
 
   @@index([status])
   @@index([city])

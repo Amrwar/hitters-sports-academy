@@ -8,6 +8,7 @@ import {
   Bell,
   CalendarDays,
   CalendarRange,
+  ClipboardCheck,
   ChevronRight,
   GraduationCap,
   LayoutDashboard,
@@ -52,6 +53,7 @@ const groups: { label: string; items: { href: string; label: string; icon: typeo
     label: "People",
     items: [
       { href: "/admin/members", label: "Members", icon: Users },
+      { href: "/admin/assessments", label: "Assessments", icon: ClipboardCheck },
       { href: "/admin/staff", label: "Staff", icon: UserSquare2 },
       { href: "/admin/trainers", label: "Trainers", icon: UserSquare2 },
       { href: "/admin/programs", label: "Programs", icon: GraduationCap },

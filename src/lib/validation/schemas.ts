@@ -37,10 +37,23 @@ export const updateProfileSchema = z.object({
   name: name.optional(),
   phone,
   side: sideSchema.optional(),
-  bio: z.string().trim().max(500).optional().or(z.literal("").transform(() => undefined)),
+  bio: z.string().trim().max(500).optional().or(z.literal("").transform(() => null)),
   homeLocationId: z.string().cuid().nullable().optional(),
   visibility: z.enum(["PUBLIC", "MEMBERS", "PRIVATE"]).optional(),
   dateOfBirth: z.coerce.date().max(new Date(), "Date of birth must be in the past.").nullable().optional(),
+  photoUrl: z
+    .string()
+    .trim()
+    .max(500)
+    .refine((u) => u === "" || /^https?:\/\/[^\s]+$/i.test(u), "Use an https image URL.")
+    .transform((u) => (u === "" ? null : u))
+    .optional(),
+  selfLevel: levelSchema.nullable().optional(),
+  matchType: z.enum(["FRIENDLY", "COMPETITIVE", "ANY"]).optional(),
+  playStyle: z.string().trim().max(80).optional().or(z.literal("").transform(() => null)),
+  yearsPlaying: z.coerce.number().int().min(0).max(60).nullable().optional(),
+  preferredTimes: z.array(z.enum(PREFERRED_TIME_KEYS)).max(6).optional(),
+  preferredLocationIds: z.array(z.string().cuid()).max(5).optional(),
 });
 
 export const slug = z
@@ -106,8 +119,50 @@ export const assessmentSchema = z.object({
   playerProfileId: z.string().cuid(),
   locationId: z.string().cuid(),
   level: levelSchema,
-  notes: z.string().trim().max(2000).optional(),
-  scores: z.record(z.string(), z.number().min(0).max(10)).optional(),
+  kind: z.enum(["INITIAL", "REASSESSMENT", "LEVEL_CHANGE"]).optional(),
+  notes: z.string().trim().max(2000).optional().or(z.literal("").transform(() => undefined)),
+  staffNotes: z.string().trim().max(2000).optional().or(z.literal("").transform(() => undefined)),
+  scores: z.record(z.string(), z.coerce.number().min(0).max(10)).optional(),
+  requestId: z.string().cuid().optional().or(z.literal("").transform(() => undefined)),
+  assessedAt: z.coerce.date().optional(),
+});
+
+export const requestAssessmentSchema = z.object({
+  locationId: z.string().cuid(),
+  note: z.string().trim().max(500).optional().or(z.literal("").transform(() => undefined)),
+});
+
+export const scheduleAssessmentSchema = z.object({
+  scheduledAt: z.coerce.date().refine((d) => d.getTime() > Date.now() - 60_000, "Pick a time in the future."),
+  assessorId: z.string().cuid().optional().or(z.literal("").transform(() => undefined)),
+});
+
+export const levelChangeSchema = z.object({
+  playerProfileId: z.string().cuid(),
+  level: levelSchema,
+  reason: z.string().trim().min(5, "Give a reason for the change.").max(500),
+});
+
+export const levelDefinitionsSchema = z
+  .array(
+    z.object({
+      level: levelSchema,
+      rank: z.coerce.number().int().min(1).max(4),
+      label: z.string().trim().min(2).max(40),
+      description: z.string().trim().min(5).max(500),
+    }),
+  )
+  .length(4, "Provide all four levels.");
+
+export const trainingRecordSchema = z.object({
+  playerProfileId: z.string().cuid(),
+  locationId: z.string().cuid(),
+  kind: z.enum(["PRIVATE", "PROGRAM", "CLINIC", "ASSESSMENT"]).default("PRIVATE"),
+  title: z.string().trim().min(2).max(120),
+  heldAt: z.coerce.date(),
+  durationMinutes: z.coerce.number().int().min(15).max(480).default(60),
+  notes: z.string().trim().max(1000).optional().or(z.literal("").transform(() => undefined)),
+  trainerId: z.string().cuid().optional().or(z.literal("").transform(() => undefined)),
 });
 
 export const paginationSchema = z.object({
@@ -128,7 +183,7 @@ export function fieldErrors(e: z.ZodError): Record<string, string> {
 
 /* ------------------------------------------------------------------ Location management (phase: courts) */
 
-import { FACILITY_KEYS } from "@/lib/catalog";
+import { FACILITY_KEYS, PREFERRED_TIME_KEYS } from "@/lib/catalog";
 import { isValidTimeZone } from "@/lib/time";
 
 const minutesOfDay = z.coerce.number().int().min(0).max(24 * 60);

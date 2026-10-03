@@ -64,12 +64,14 @@ const levelStyles: Record<Level, string> = {
 };
 
 /** A/B/C/D assessment level chip. */
-export function LevelBadge({ level, size = "md", withLabel, className }: { level: Level; size?: "sm" | "md" | "lg"; withLabel?: boolean; className?: string }) {
+/** A/B/C/D chip. Pass `label` from the configurable level definitions; the built-in labels are only a fallback. */
+export function LevelBadge({ level, size = "md", withLabel, label, className }: { level: Level; size?: "sm" | "md" | "lg"; withLabel?: boolean; label?: string; className?: string }) {
   const sz = { sm: "size-6 text-caption", md: "size-8 text-body-sm", lg: "size-11 text-h4" }[size];
+  const text = label ?? LEVEL_LABEL[level];
   return (
-    <span className={cn("inline-flex items-center gap-2", className)} title={`Level ${level} · ${LEVEL_LABEL[level]}`}>
+    <span className={cn("inline-flex items-center gap-2", className)} title={`Level ${level} · ${text}`}>
       <span className={cn("inline-flex shrink-0 items-center justify-center rounded-sm font-extrabold", sz, levelStyles[level])}>{level}</span>
-      {withLabel && <span className="text-body-sm font-medium text-fg-muted">{LEVEL_LABEL[level]}</span>}
+      {withLabel && <span className="text-body-sm font-medium text-fg-muted">{text}</span>}
     </span>
   );
 }

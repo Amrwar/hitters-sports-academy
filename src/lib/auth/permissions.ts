@@ -14,9 +14,15 @@ export const PERMISSIONS = [
   "profile.update.own",
   "profile.read.any",
   "profile.update.any",
-  // Assessments
+  // Assessments and levels
   "assessment.read",
   "assessment.create",
+  "assessment.request.own",
+  "assessment.schedule",
+  "level.override",
+  "levels.configure",
+  "training.read",
+  "training.record",
   // Locations and courts
   "location.read",
   "location.create",
@@ -47,7 +53,7 @@ export const PERMISSIONS = [
 export type Permission = (typeof PERMISSIONS)[number];
 
 /** Permissions that are never location scoped. */
-export const GLOBAL_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>(["location.create", "roles.manage", "users.suspend", "users.manage"]);
+export const GLOBAL_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>(["location.create", "roles.manage", "users.suspend", "users.manage", "levels.configure"]);
 
 const ALL = [...PERMISSIONS];
 
@@ -63,6 +69,10 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "profile.read.any",
     "profile.update.any",
     "assessment.read",
+    "assessment.schedule",
+    "level.override",
+    "training.read",
+    "training.record",
     "location.read",
     "location.manage",
     "court.read",
@@ -77,11 +87,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "notification.send",
     "audit.read",
   ],
-  RECEPTIONIST: ["users.read", "profile.read.any", "assessment.read", "location.read", "court.read", "staff.read", "booking.read", "booking.manage", "payment.manage", "notification.send"],
-  TRAINER: ["users.read", "profile.read.any", "assessment.read", "location.read", "court.read", "booking.read"],
-  ASSESSOR: ["users.read", "profile.read.any", "assessment.read", "assessment.create", "location.read", "court.read"],
+  RECEPTIONIST: ["users.read", "profile.read.any", "assessment.read", "assessment.schedule", "training.read", "location.read", "court.read", "staff.read", "booking.read", "booking.manage", "payment.manage", "notification.send"],
+  TRAINER: ["users.read", "profile.read.any", "assessment.read", "training.read", "training.record", "location.read", "court.read", "booking.read"],
+  ASSESSOR: ["users.read", "profile.read.any", "assessment.read", "assessment.create", "assessment.schedule", "training.read", "location.read", "court.read"],
   FINANCE_MANAGER: ["users.read", "location.read", "court.read", "finance.read", "finance.manage", "booking.read", "payment.manage", "audit.read"],
-  PLAYER: ["profile.read.own", "profile.update.own", "location.read", "court.read", "booking.create.own", "booking.read.own", "booking.cancel.own"],
+  PLAYER: ["profile.read.own", "profile.update.own", "assessment.request.own", "location.read", "court.read", "booking.create.own", "booking.read.own", "booking.cancel.own"],
 };
 
 /** Staff roles a LOCATION_MANAGER may grant at their own location. Only global roles may grant LOCATION_MANAGER. */

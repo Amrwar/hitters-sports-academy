@@ -6,13 +6,16 @@ import { getActor } from "@/lib/auth/cookies";
 import { updateProfile, type ProfileView } from "@/server/services/profiles";
 import { markAllNotificationsRead, markNotificationRead } from "@/server/services/notifications";
 
-export async function updateProfileAction(profileId: string, form: FormData): Promise<ActionResult<ProfileView>> {
+export async function updateProfileAction(profileId: string, input: FormData | Record<string, unknown>): Promise<ActionResult<ProfileView>> {
   try {
-    const data: Record<string, string | null> = {};
-    form.forEach((v, k) => {
-      if (typeof v === "string") data[k] = v;
-    });
-    if (data.homeLocationId === "") data.homeLocationId = null;
+    let data: Record<string, unknown>;
+    if (input instanceof FormData) {
+      data = {};
+      input.forEach((v, k) => {
+        if (typeof v === "string") data[k] = v;
+      });
+      if (data.homeLocationId === "") data.homeLocationId = null;
+    } else data = input;
     const profile = await updateProfile(await getActor(), profileId, data);
     revalidatePath("/app/profile");
     revalidatePath("/app");

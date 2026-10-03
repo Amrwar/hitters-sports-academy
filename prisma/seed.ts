@@ -8,6 +8,7 @@
 import { PrismaClient, type CourtType, type PlayerLevel, type StaffRole } from "@prisma/client";
 import { hashPassword } from "../src/lib/auth/password";
 import { seedRolePermissions } from "../src/server/services/permissions-seed";
+import { DEFAULT_LEVELS } from "../src/server/services/levels";
 
 const db = new PrismaClient();
 export const DEV_PASSWORD = "HittersDev!2026";
@@ -56,6 +57,7 @@ const USERS: SeedUser[] = [
 async function main() {
   const perms = await seedRolePermissions(db);
   console.log(`permissions: ${perms.total} grants (${perms.removed} stale removed)`);
+  await db.levelDefinition.createMany({ data: DEFAULT_LEVELS, skipDuplicates: true });
 
   const locationIds = new Map<string, string>();
   for (const l of LOCATIONS) {
@@ -130,6 +132,11 @@ async function main() {
     ]);
   }
   console.log("assessments: done");
+  // A pending assessment request so the admin queue is not empty.
+  const youssef = await db.playerProfile.findUniqueOrThrow({ where: { userId: userIds.get("youssef@example.com")! } });
+  if ((await db.assessmentRequest.count({ where: { playerProfileId: youssef.id } })) === 0) {
+    await db.assessmentRequest.create({ data: { playerProfileId: youssef.id, locationId: locationIds.get("sheikh-zayed")!, kind: "INITIAL", note: "New to padel, played squash before." } });
+  }
   console.log(`\nSeed complete. Sign in with any seeded email and the development password defined in prisma/seed.ts.`);
 }
 

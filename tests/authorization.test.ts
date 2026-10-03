@@ -293,7 +293,7 @@ describe("assessments", () => {
     const profile = await db.playerProfile.findUniqueOrThrow({ where: { id: w.playerA.profileId } });
     expect(profile.level).toBe("B");
     const notif = await db.notification.findFirst({ where: { userId: w.playerA.user.id, type: "assessment.completed" } });
-    expect(notif?.title).toContain("Level B");
+    expect(notif?.title).toContain("B");
     await expectCode(assessments.createAssessment(w.assessorA.actor, { playerProfileId: w.playerB.profileId, locationId: w.B.id, level: "A" }), "FORBIDDEN");
     await expectCode(assessments.createAssessment(w.trainerA.actor, { playerProfileId: w.playerA.profileId, locationId: w.A.id, level: "A" }), "FORBIDDEN");
     await expectCode(assessments.createAssessment(w.managerA.actor, { playerProfileId: w.playerA.profileId, locationId: w.A.id, level: "A" }), "FORBIDDEN");

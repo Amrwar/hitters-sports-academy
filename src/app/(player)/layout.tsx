@@ -13,7 +13,7 @@ export default async function PlayerLayout({ children }: { children: React.React
     <div className="min-h-dvh bg-court">
       <div className="relative mx-auto min-h-dvh max-w-app bg-canvas sm:border-x sm:border-line/10">
         <PlayerTopBar unread={unread} userName={actor.name} />
-        <main className="px-4 pb-32 pt-5 animate-fade-in">
+        <main className="px-4 pb-32 pt-5">
           {!actor.emailVerifiedAt && <VerifyBanner email={actor.email} />}
           {children}
         </main>

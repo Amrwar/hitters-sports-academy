@@ -117,7 +117,7 @@ export function MembersAdmin({ users, total, query, locations, canSuspend, canAs
                   );
                 }
                 return (
-                  <TR key={u.id} interactive>
+                  <TR key={u.id} interactive onClick={() => router.push(`/admin/members/${u.id}`)}>
                     <TD>
                       <div className="flex items-center gap-3">
                         <Avatar name={u.name} size="sm" />
@@ -153,7 +153,7 @@ export function MembersAdmin({ users, total, query, locations, canSuspend, canAs
                       <StatusBadge status={u.status === "ACTIVE" ? "active" : u.status === "SUSPENDED" ? "paused" : "expired"} />
                     </TD>
                     <TD className="whitespace-nowrap text-fg-muted">{new Date(u.createdAt).toLocaleDateString("en", { month: "short", year: "numeric" })}</TD>
-                    <TD className="w-12">
+                    <TD className="w-12" onClick={(e) => e.stopPropagation()}>
                       {items.length > 0 && (
                         <Dropdown
                           trigger={
