@@ -4,12 +4,14 @@ import Image from "next/image";
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { LevelDefinition } from "@prisma/client";
-import { CalendarCheck, ClipboardCheck, Clock, History, LogOut, MapPin, Settings, ShieldCheck, Swords, Trophy, User } from "lucide-react";
+import { BadgeCheck, CalendarCheck, ClipboardCheck, Clock, History, LogOut, MapPin, Settings, ShieldCheck, Swords, Trophy, User, Wallet } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge, LevelBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, SectionHeader } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
+import { QuickAction } from "@/components/patterns/cards";
+import { money } from "@/components/patterns/booking-status";
 import { Chip, StatTile } from "@/components/ui/misc";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -28,6 +30,9 @@ import { cancelAssessmentRequestAction, requestAssessmentAction } from "@/server
 import { label } from "@/lib/catalog";
 
 type Tab = "overview" | "assessment" | "history" | "settings";
+/** Just enough money for the two tiles; the billing page itself does the real reading. */
+export type BillingSummary = { owedCents: number; creditCents: number; membership: string | null };
+
 type Props = {
   profile: Profile;
   overview: AssessmentOverview;
@@ -37,11 +42,12 @@ type Props = {
   locations: { id: string; name: string; status: string }[];
   isStaff: boolean;
   initialTab: Tab;
+  billing: BillingSummary;
 };
 
 const KIND_LABEL = { INITIAL: "Initial assessment", REASSESSMENT: "Reassessment", LEVEL_CHANGE: "Level change" } as const;
 
-export function ProfileView({ profile, overview, history, assessments, levels, locations, isStaff, initialTab }: Props) {
+export function ProfileView({ profile, overview, history, assessments, levels, locations, isStaff, initialTab, billing }: Props) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const levelMap = Object.fromEntries(levels.map((l) => [l.level, l]));
   const memberSince = new Date(profile.user.createdAt).toLocaleDateString("en", { month: "short", year: "numeric" });
@@ -90,6 +96,11 @@ export function ProfileView({ profile, overview, history, assessments, levels, l
           { value: "settings", label: "Settings", icon: <Settings /> },
         ]}
       />
+
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        <QuickAction href="/app/billing" icon={<Wallet />} label="Payments" hint={billing.owedCents > 0 ? `${money(billing.owedCents)} to pay` : billing.creditCents > 0 ? `${money(billing.creditCents)} on account` : "Receipts and credit"} />
+        <QuickAction href="/app/membership" icon={<BadgeCheck />} label="Membership" hint={billing.membership ?? "See the plans"} />
+      </div>
 
       {tab === "overview" && <Overview profile={profile} overview={overview} history={history} levelMap={levelMap} onGoAssess={() => setTab("assessment")} />}
       {tab === "assessment" && <AssessmentTab profile={profile} overview={overview} assessments={assessments} levels={levels} locations={locations} />}

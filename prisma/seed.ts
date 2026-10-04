@@ -14,6 +14,7 @@ import { plainDate } from "../src/lib/time";
 import { seedHistory } from "./seed-history";
 import { seedMembers } from "./seed-members";
 import { seedAcademyHistory } from "./seed-academy-history";
+import { seedMoney } from "./seed-money";
 
 const db = new PrismaClient();
 /** Shared password for every seeded account. Override with SEED_PASSWORD when seeding anything reachable from the internet. */
@@ -366,6 +367,10 @@ async function main() {
   // Finished intakes behind today and the open ones nearly full, so the academy reports on a real roster.
   const academy = await seedAcademyHistory(db);
   console.log(academy.skipped ? "academy history: already present" : `academy history: ${academy.programs} intakes, ${academy.enrollments} enrolments`);
+
+  // The money: a policy, plans with members on them, codes, and an invoice behind every booking.
+  const moneyRun = await seedMoney(db);
+  console.log(`money: ${moneyRun.plans} plans, ${moneyRun.members} members, ${moneyRun.coupons} codes, ${moneyRun.invoices} invoices`);
 
   console.log(`\nSeed complete. Sign in with any seeded email and the development password defined in prisma/seed.ts.`);
 }

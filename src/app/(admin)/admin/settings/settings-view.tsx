@@ -9,10 +9,13 @@ import { Field, Input, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/misc";
 import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { updateMatchmakingConfigAction } from "@/server/actions/matchmaking";
 import { updateAcademySettingsAction } from "@/server/actions/admin";
+import { updatePaymentPolicyAction } from "@/server/actions/finance";
 import type { AcademyProfile } from "@/server/services/academy-settings";
+import type { EffectivePolicy } from "@/server/services/payment-policy";
 
 type Matchmaking = { allowAdjacentLevels: boolean; requestExpiryHours: number; maxOpenRequests: number };
 
@@ -21,11 +24,15 @@ const TIMEZONES = ["Africa/Cairo", "Europe/Madrid", "Europe/London", "Asia/Dubai
 export function SettingsView({
   matchmaking,
   academy,
+  policy,
+  onlineAvailable,
   canConfigure,
   canConfigureAcademy,
 }: {
   matchmaking: Matchmaking;
   academy: AcademyProfile;
+  policy: EffectivePolicy;
+  onlineAvailable: boolean;
   canConfigure: boolean;
   canConfigureAcademy: boolean;
 }) {
@@ -34,6 +41,31 @@ export function SettingsView({
   const [mm, setMm] = useState(matchmaking);
   const [ac, setAc] = useState(academy);
   const [busy, setBusy] = useState(false);
+  const [savingPolicy, setSavingPolicy] = useState(false);
+
+  /**
+   * The payment policy saves on its own, not through the page's one Save button: it is a different kind
+   * of setting with its own permission, and mixing it in would mean a manager without finance.manage
+   * being told the whole page failed to save.
+   */
+  async function savePolicy(form: FormData) {
+    setSavingPolicy(true);
+    const res = await updatePaymentPolicyAction(null, {
+      timing: String(form.get("timing")),
+      depositPercent: Number(form.get("depositPercent") ?? 0),
+      lateCancellationPercent: Number(form.get("lateCancellationPercent") ?? 0),
+      noShowPercent: Number(form.get("noShowPercent") ?? 0),
+      refundDestination: String(form.get("refundDestination")),
+      refundCutoffHours: Number(form.get("refundCutoffHours") ?? 0),
+      defaultGameCostMode: String(form.get("defaultGameCostMode")),
+      allowCredit: form.get("allowCredit") === "on",
+    });
+    setSavingPolicy(false);
+    if (res.ok) {
+      toast({ tone: "success", title: "Payment policy saved" });
+      router.refresh();
+    } else toast({ tone: "danger", title: "The policy was not saved", description: res.message });
+  }
 
   const mmDirty = JSON.stringify(mm) !== JSON.stringify(matchmaking);
   const acDirty = JSON.stringify(ac) !== JSON.stringify(academy);
@@ -205,9 +237,80 @@ export function SettingsView({
               Open pricing
             </Button>
           </Card>
-          <Alert tone="info" title="Payments are recorded, not collected">
-            Every booking, lesson and package already carries a payment record marked pay at venue. Connecting a provider turns those into online checkout and refunds without changing the rest of the system.
-          </Alert>
+          <Card>
+            <CardHeader
+              title="Payment policy"
+              description="The academy default. A club that does things differently overrides it on its own page."
+              action={<Badge tone={onlineAvailable ? "success" : "neutral"}>{onlineAvailable ? "Gateway connected" : "Desk only"}</Badge>}
+            />
+            <form action={savePolicy} className="space-y-3">
+              <Field label="When money is taken" hint={onlineAvailable ? undefined : "Online needs PAYMENT_PROVIDER set on the deployment."}>
+                {(id) => (
+                  <Select
+                    id={id}
+                    name="timing"
+                    defaultValue={policy.timing}
+                    disabled={!onlineAvailable}
+                    options={[
+                      { value: "AT_CLUB", label: "At the club" },
+                      { value: "BOTH", label: "At the club or online" },
+                      { value: "ONLINE", label: "Online only" },
+                    ]}
+                  />
+                )}
+              </Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Deposit" hint="Percent taken up front. 0 means the whole amount.">
+                  {(id) => <Input id={id} name="depositPercent" type="number" min="0" max="100" defaultValue={policy.depositPercent} disabled={!onlineAvailable} />}
+                </Field>
+                <Field label="Late cancellation" hint="Percent kept when a player cancels after the cutoff.">
+                  {(id) => <Input id={id} name="lateCancellationPercent" type="number" min="0" max="100" defaultValue={policy.lateCancellationPercent} />}
+                </Field>
+                <Field label="No-show" hint="Percent kept when nobody turns up.">
+                  {(id) => <Input id={id} name="noShowPercent" type="number" min="0" max="100" defaultValue={policy.noShowPercent} />}
+                </Field>
+                <Field label="No-refund window" hint="Hours before the start after which nothing is refunded.">
+                  {(id) => <Input id={id} name="refundCutoffHours" type="number" min="0" max="168" defaultValue={policy.refundCutoffHours} />}
+                </Field>
+              </div>
+              <Field label="Refunds go">
+                {(id) => (
+                  <Select
+                    id={id}
+                    name="refundDestination"
+                    defaultValue={policy.refundDestination}
+                    options={[
+                      { value: "ORIGINAL", label: "Back the way they came" },
+                      { value: "CREDIT", label: "To the member's account credit" },
+                      { value: "CASH", label: "Cash at the club" },
+                    ]}
+                  />
+                )}
+              </Field>
+              <Field label="Splitting a game's cost" hint="What an organizer starts on; they may change it.">
+                {(id) => (
+                  <Select
+                    id={id}
+                    name="defaultGameCostMode"
+                    defaultValue={policy.defaultGameCostMode}
+                    options={[
+                      { value: "SPLIT_EVENLY", label: "Split evenly between the players" },
+                      { value: "ORGANIZER_PAYS", label: "The organizer pays" },
+                      { value: "FIXED_PER_PLAYER", label: "A fixed amount each" },
+                      { value: "FREE", label: "Nobody is charged" },
+                    ]}
+                  />
+                )}
+              </Field>
+              <label className="flex items-center gap-2 text-body-sm">
+                <input type="checkbox" name="allowCredit" defaultChecked={policy.allowCredit} className="size-4 rounded border-line/30" />
+                Members may pay from their account credit
+              </label>
+              <Button type="submit" size="sm" loading={savingPolicy}>
+                Save policy
+              </Button>
+            </form>
+          </Card>
         </div>
       </div>
     </AdminShell>

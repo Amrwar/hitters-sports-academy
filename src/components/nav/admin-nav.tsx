@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import {
+  BadgeCheck,
   BarChart3,
   Bell,
   CalendarDays,
@@ -11,6 +12,9 @@ import {
   ClipboardCheck,
   Dumbbell,
   Package,
+  Receipt,
+  TicketPercent,
+  Wallet,
   ChevronRight,
   GraduationCap,
   LayoutDashboard,
@@ -53,6 +57,15 @@ const groups: { label: string; items: { href: string; label: string; icon: typeo
       { href: "/admin/coaching", label: "Coaching", icon: Dumbbell },
       { href: "/admin/courts", label: "Courts", icon: LayoutGrid },
       { href: "/admin/locations", label: "Locations", icon: MapPin },
+    ],
+  },
+  {
+    label: "Money",
+    items: [
+      { href: "/admin/finance", label: "Finance", icon: Wallet },
+      { href: "/admin/finance/invoices", label: "Invoices", icon: Receipt },
+      { href: "/admin/memberships", label: "Memberships", icon: BadgeCheck },
+      { href: "/admin/coupons", label: "Coupons", icon: TicketPercent },
     ],
   },
   {
