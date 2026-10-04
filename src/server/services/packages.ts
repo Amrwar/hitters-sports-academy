@@ -22,7 +22,9 @@ export const packageSelect = {
   trainerId: true,
   locationId: true,
   active: true,
-  trainer: { select: { id: true, user: { select: { name: true } } } },
+  // hourlyRateCents is what the same lesson costs without a package, which is the only honest way to show
+  // a saving on the buy screen.
+  trainer: { select: { id: true, hourlyRateCents: true, user: { select: { name: true } } } },
   location: { select: { id: true, name: true } },
 } satisfies Prisma.TrainingPackageSelect;
 export type PackageView = Prisma.TrainingPackageGetPayload<{ select: typeof packageSelect }>;

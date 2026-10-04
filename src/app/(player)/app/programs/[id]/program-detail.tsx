@@ -10,7 +10,7 @@ import { Card, SectionHeader } from "@/components/ui/card";
 import { Badge, LevelBadge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { Avatar } from "@/components/ui/avatar";
-import { ProgressBar } from "@/components/ui/misc";
+import { ProgressBar, StickyBar } from "@/components/ui/misc";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { money, PaymentStatusBadge } from "@/components/patterns/booking-status";
@@ -19,7 +19,8 @@ import { programCategoryLabel } from "@/lib/catalog";
 import { formatInZone } from "@/lib/time";
 import type { EnrollmentView, ProgramView } from "@/server/services/programs";
 import { cancelEnrollmentAction, enrollAction } from "@/server/actions/academy";
-import { count } from "@/lib/text";
+import { count, pluralize } from "@/lib/text";
+import { cn } from "@/lib/cn";
 
 const ATT_TONE = { PRESENT: "success", LATE: "warning", ABSENT: "danger", EXCUSED: "neutral" } as const;
 
@@ -35,6 +36,8 @@ export function ProgramDetail({ program: p, enrollment, levels, myLevel }: { pro
   const levelOk = p.levels.length === 0 || (myLevel ? p.levels.includes(myLevel) : false);
   const full = p.spotsLeft === 0;
   const attended = enrollment ? enrollment.attendance.filter((a) => a.status === "PRESENT" || a.status === "LATE").length : 0;
+  const perSession = p.sessionsCount > 0 ? Math.round(p.priceCents / p.sessionsCount) : 0;
+  const nextSession = p.sessions.find((x) => x.status !== "CANCELLED" && new Date(x.startsAt) > new Date()) ?? null;
 
   async function act(label: string, fn: () => Promise<{ ok: boolean; message?: string; code?: string }>) {
     setBusy(true);
@@ -49,23 +52,21 @@ export function ProgramDetail({ program: p, enrollment, levels, myLevel }: { pro
   }
 
   return (
-    <div className="space-y-6 pb-4">
+    <div className={cn("space-y-6", canEnroll && levelOk ? "pb-28" : "pb-4")}>
       <PageHeader back="/app/programs" title={p.name} eyebrow={programCategoryLabel(p.category)} action={<ProgramStatusBadge status={p.status} />} />
       <Card variant="brand" padding="lg" className="court-line">
         <div className="relative">
-          <div className="flex items-center justify-between">
-            <div className="flex gap-1.5">{p.levels.length ? p.levels.map((l) => <LevelBadge key={l} level={l} size="sm" label={levels[l]} />) : <Badge className="bg-white/15 text-white">Any level</Badge>}</div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-wrap gap-1.5">{p.levels.length ? p.levels.map((l) => <LevelBadge key={l} level={l} size="sm" label={levels[l]} />) : <Badge className="bg-white/15 text-white">Any level</Badge>}</div>
             {enrollment && inProgram && <EnrollmentBadge status={enrollment.status} position={enrollment.position} size="md" />}
           </div>
-          <h2 className="mt-4 text-h1">{p.name}</h2>
-          {p.description && <p className="mt-2 text-body text-white/85">{p.description}</p>}
-          <div className="mt-5 flex items-end justify-between">
-            <div>
-              <div className="text-caption text-white/70">Full program · {count(p.sessionsCount, "session")}</div>
-              <div className="text-h2 tabular">{money(p.priceCents, p.currency)}</div>
-            </div>
-            <div className="text-right text-caption text-white/70">{money(Math.round(p.priceCents / p.sessionsCount), p.currency)} per session · pay at the venue</div>
+          {p.description && <p className="mt-4 text-body-lg text-white/90">{p.description}</p>}
+          <div className="mt-5 grid grid-cols-3 divide-x divide-white/15 rounded-md bg-black/15 py-3 text-center">
+            <Figure value={String(p.sessionsCount)} label={pluralize(p.sessionsCount, "session")} />
+            <Figure value={money(p.priceCents, p.currency)} label="full program" />
+            <Figure value={perSession ? money(perSession, p.currency) : "—"} label="per session" />
           </div>
+          <div className="mt-2.5 text-center text-caption text-white/70">Payable at the venue</div>
         </div>
       </Card>
 
@@ -139,9 +140,18 @@ export function ProgramDetail({ program: p, enrollment, levels, myLevel }: { pro
           {p.sessions.map((s) => {
             const mark = enrollment?.attendance.find((a) => a.sessionId === s.id);
             const past = new Date(s.endsAt) < new Date();
+            const isNext = nextSession?.id === s.id;
             return (
-              <div key={s.id} className={`flex items-center gap-3 rounded-md border border-line/10 bg-surface-1 px-3 py-2 text-body-sm ${s.status === "CANCELLED" ? "opacity-50" : ""}`}>
-                <span className="w-6 text-caption font-bold tabular text-fg-subtle">{s.index}</span>
+              <div
+                key={s.id}
+                className={cn(
+                  "flex items-center gap-3 rounded-md border px-3 py-2 text-body-sm",
+                  isNext ? "border-blue-400/40 bg-blue-500/5" : "border-line/10 bg-surface-1",
+                  s.status === "CANCELLED" && "opacity-50",
+                  past && !isNext && "text-fg-muted",
+                )}
+              >
+                <span className={cn("w-6 text-caption font-bold tabular", isNext ? "text-blue-300" : "text-fg-subtle")}>{s.index}</span>
                 <span className="flex-1 truncate">
                   {formatInZone(new Date(s.startsAt), tz, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                   {s.topic ? ` · ${s.topic}` : ""}
@@ -156,6 +166,10 @@ export function ProgramDetail({ program: p, enrollment, levels, myLevel }: { pro
                   </Badge>
                 ) : past && enrollment ? (
                   <Badge size="sm">Not marked</Badge>
+                ) : isNext ? (
+                  <Badge size="sm" tone="info">
+                    Next
+                  </Badge>
                 ) : null}
               </div>
             );
@@ -172,18 +186,10 @@ export function ProgramDetail({ program: p, enrollment, levels, myLevel }: { pro
         </Card>
       )}
 
-      {canEnroll && (
-        <div className="space-y-2">
-          {!levelOk ? (
-            <Alert tone="warning" title={myLevel ? `For levels ${p.levels.join(", ")}` : "An official level is required"} action={myLevel ? undefined : <Button size="sm" variant="secondary" href="/app/profile?tab=assessment">Get assessed</Button>}>
-              {myLevel ? `Your official level is ${myLevel}.` : `This program takes levels ${p.levels.join(", ")}. Request a free assessment.`}
-            </Alert>
-          ) : (
-            <Button size="xl" fullWidth className="shadow-glow-md" leftIcon={full ? <Users /> : <CheckCircle2 />} disabled={full && !p.allowWaitlist} onClick={() => setConfirm(true)}>
-              {full ? (p.allowWaitlist ? "Join the waitlist" : "Program full") : `Enroll · ${money(p.priceCents, p.currency)}`}
-            </Button>
-          )}
-        </div>
+      {canEnroll && !levelOk && (
+        <Alert tone="warning" title={myLevel ? `For levels ${p.levels.join(", ")}` : "An official level is required"} action={myLevel ? undefined : <Button size="sm" variant="secondary" href="/app/profile?tab=assessment">Get assessed</Button>}>
+          {myLevel ? `Your official level is ${myLevel}.` : `This program takes levels ${p.levels.join(", ")}. Request a free assessment.`}
+        </Alert>
       )}
       {inProgram && (p.status === "OPEN" || p.status === "FULL") && (
         <Button variant="ghost" fullWidth leftIcon={<XCircle />} className="text-danger hover:bg-danger/10 hover:text-danger" onClick={() => setWithdraw(true)}>
@@ -191,8 +197,34 @@ export function ProgramDetail({ program: p, enrollment, levels, myLevel }: { pro
         </Button>
       )}
 
+      {canEnroll && levelOk && (
+        <StickyBar>
+          <Card variant="brand" padding="sm" className="shadow-lg backdrop-blur-xl">
+            <div className="relative flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-caption text-white/80">{full ? (p.allowWaitlist ? "Group is full" : "No places left") : `${count(p.spotsLeft, "place")} left`}</div>
+                <div className="truncate text-h4 tabular">{money(p.priceCents, p.currency)}</div>
+              </div>
+              <Button size="lg" variant="volt" leftIcon={full ? <Users /> : <CheckCircle2 />} disabled={full && !p.allowWaitlist} onClick={() => setConfirm(true)}>
+                {full ? (p.allowWaitlist ? "Join waitlist" : "Full") : "Enroll"}
+              </Button>
+            </div>
+          </Card>
+        </StickyBar>
+      )}
+
       <ConfirmDialog open={confirm} onClose={() => setConfirm(false)} title={full ? "Join the waitlist?" : "Enroll in this program?"} description={full ? "You take the next free place in order and are told when it opens." : `${money(p.priceCents, p.currency)} is paid at the venue. Withdraw free of charge up to ${p.cancellationCutoffHours} hours before the first session.`} confirmLabel={full ? "Join waitlist" : "Enroll"} loading={busy} onConfirm={() => act(full ? "Added to the waitlist" : "You are enrolled", () => enrollAction(p.id))} />
       <ConfirmDialog open={withdraw} onClose={() => setWithdraw(false)} title="Withdraw?" description={enrollment?.status === "WAITLISTED" ? "You leave the waitlist." : "Your place goes to the next player on the waitlist. Any payment is refunded at the venue."} confirmLabel="Withdraw" tone="danger" loading={busy} onConfirm={() => enrollment && act("Withdrawn", () => cancelEnrollmentAction(enrollment.id))} />
+    </div>
+  );
+}
+
+/** One number in the hero's offer strip. */
+function Figure({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="px-1">
+      <div className="text-h4 tabular leading-tight">{value}</div>
+      <div className="text-[11px] uppercase tracking-wider text-white/70">{label}</div>
     </div>
   );
 }

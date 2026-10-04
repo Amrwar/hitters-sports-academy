@@ -153,3 +153,18 @@ export function ChipRow({ children, className }: { children: ReactNode; classNam
     </div>
   );
 }
+
+/* ---------------------------------------------------------------- Sticky bar */
+
+/**
+ * A bar pinned above the player app's bottom navigation, for the one action a screen exists to perform.
+ *
+ * Detail screens run long — a twelve-session program pushes "Enroll" two screens below the fold — so the
+ * decision has to travel with the reader. It sits at `bottom-[104px]` to clear the tab bar, and the player
+ * `<main>` must not carry a transform animation or a `fixed` child is trapped inside it.
+ *
+ * Give the page `pb-28` (or more) so the last of its content is not hidden behind the bar.
+ */
+export function StickyBar({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn("fixed inset-x-0 bottom-[104px] z-30 mx-auto max-w-app px-4", className)}>{children}</div>;
+}

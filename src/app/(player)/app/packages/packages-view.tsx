@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Package, Receipt } from "lucide-react";
+import { CalendarClock, MapPin, Package, Receipt, Users } from "lucide-react";
 import { PageHeader } from "@/components/nav/player-nav";
 import { Button } from "@/components/ui/button";
 import { Card, SectionHeader } from "@/components/ui/card";
@@ -16,6 +16,10 @@ import { formatInZone } from "@/lib/time";
 import type { PackageView, PurchaseView } from "@/server/services/packages";
 import { purchasePackageAction } from "@/server/actions/academy";
 import { count } from "@/lib/text";
+import { cn } from "@/lib/cn";
+
+/** What one lesson works out to. Credits are validated above zero, but a stray row should not print NaN. */
+const perLesson = (c: PackageView): number => (c.credits > 0 ? Math.round(c.priceCents / c.credits) : c.priceCents);
 
 export function PackagesView({ purchases, catalog }: { purchases: PurchaseView[]; catalog: PackageView[] }) {
   const router = useRouter();
@@ -24,6 +28,7 @@ export function PackagesView({ purchases, catalog }: { purchases: PurchaseView[]
   const [busy, setBusy] = useState(false);
   const active = purchases.filter((p) => p.status === "ACTIVE");
   const history = purchases.flatMap((p) => p.redemptions.map((r) => ({ ...r, purchase: p })));
+  const cheapest = catalog.length ? Math.min(...catalog.map(perLesson)) : 0;
 
   async function confirm() {
     if (!buy) return;
@@ -48,32 +53,58 @@ export function PackagesView({ purchases, catalog }: { purchases: PurchaseView[]
         </div>
       ) : (
         <Card variant="outline" padding="md" className="text-body-sm text-fg-muted">
-          No active package. Prepaid credits are cheaper per lesson and are deducted automatically when you book a coach.
+          You have no active package. Credits cost less per lesson than booking one at a time, and come off automatically
+          when you book a coach — there is nothing to redeem.
         </Card>
       )}
 
       <section>
         <SectionHeader eyebrow="Buy" title="Packages" />
-        <div className="space-y-2">
-          {catalog.map((c) => (
-            <Card key={c.id} padding="md" className="flex items-center gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-blue-500/15 text-blue-300 ring-1 ring-inset ring-blue-400/20">
-                <Package size={20} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 text-body font-bold">
-                  {c.name}
-                  <Badge size="sm">{count(c.credits, "credit")}</Badge>
+        <div className="space-y-2.5">
+          {catalog.map((c) => {
+            const each = perLesson(c);
+            const best = each === cheapest && catalog.length > 1;
+            // The standing rate for the same lesson, where the package names a coach. Without one there is
+            // nothing to compare against, so no saving is claimed.
+            const rate = c.trainer?.hourlyRateCents ?? 0;
+            const saving = rate > each ? rate - each : 0;
+            return (
+              <Card key={c.id} padding="none" variant={best ? "interactive" : "default"} className={cn("overflow-hidden", best && "border-volt/40")}>
+                {best && <div className="bg-volt/15 px-4 py-1 text-[11px] font-bold uppercase tracking-wider text-volt">Lowest price per lesson</div>}
+                <div className="flex items-center gap-3 p-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-body font-bold">{c.name}</span>
+                      <Badge size="sm">{count(c.credits, "lesson")}</Badge>
+                    </div>
+                    {c.description && <p className="mt-1 text-caption text-fg-muted">{c.description}</p>}
+                    <div className="mt-2 flex items-baseline gap-1.5">
+                      <span className="text-h3 tabular">{money(each, c.currency)}</span>
+                      <span className="text-caption text-fg-muted">per lesson</span>
+                      {saving > 0 && <span className="ml-1 text-caption font-semibold text-success">saves {money(saving, c.currency)} each</span>}
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-fg-subtle">
+                      <span className="inline-flex items-center gap-1 [&_svg]:size-3.5">
+                        <CalendarClock /> Use within {c.validityDays} days
+                      </span>
+                      <span className="inline-flex items-center gap-1 [&_svg]:size-3.5">
+                        <Users /> {c.trainer ? c.trainer.user.name : "Any coach"}
+                      </span>
+                      <span className="inline-flex items-center gap-1 [&_svg]:size-3.5">
+                        <MapPin /> {c.location ? c.location.name.replace("HITTERS ", "") : "Any club"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="text-body font-bold tabular">{money(c.priceCents, c.currency)}</div>
+                    <Button size="sm" className="mt-1.5" variant={best ? "volt" : "primary"} onClick={() => setBuy(c)}>
+                      Buy
+                    </Button>
+                  </div>
                 </div>
-                <div className="text-caption text-fg-muted">
-                  {money(Math.round(c.priceCents / c.credits), c.currency)} per lesson · valid {c.validityDays} days{c.trainer ? ` · ${c.trainer.user.name}` : ""}{c.location ? ` · ${c.location.name.replace("HITTERS ", "")}` : " · Any club"}
-                </div>
-              </div>
-              <Button size="sm" onClick={() => setBuy(c)}>
-                {money(c.priceCents, c.currency)}
-              </Button>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
           {catalog.length === 0 && <EmptyState compact icon={<Package />} title="No packages on sale" description="Ask reception about a custom package." />}
         </div>
       </section>
