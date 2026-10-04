@@ -16,6 +16,26 @@ fs.mkdirSync(OUT, { recursive: true });
 const manifest = [];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Clicks free hours on the booking grid until one of them actually takes.
+ *
+ * A free hour is not necessarily bookable: the grid offers every open slot, but the default duration needs
+ * the following slots free too, so on a busy day the first few clicks do nothing. Returns false if none of
+ * them worked.
+ */
+async function pickBookableSlot(page, max = 12) {
+  const slots = await page.$$('button[aria-label$=" available"]');
+  for (const slot of slots.slice(0, max)) {
+    await slot.click().catch(() => undefined);
+    const took = await page
+      .waitForFunction(() => /EGP\s[\d,]+/.test(document.body.innerText) && !document.body.innerText.includes("No slot selected"), { timeout: 6_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (took) return true;
+  }
+  return false;
+}
+
 async function shot(page, name, caption, opts = {}) {
   await page.evaluate(() => document.fonts?.ready);
   await sleep(opts.settle ?? 600);
@@ -96,11 +116,15 @@ try {
 
   // Booking flow
   await go(page, "/app/book");
+  // Tomorrow rather than today: by the afternoon today's remaining hours are too few and too late to show
+  // a grid worth looking at, and a 90 minute booking may not fit in what is left before closing.
+  const dates = await page.$$('[aria-label="Select date"] button');
+  if (dates[1]) await dates[1].click();
   await page.waitForSelector('button[aria-label$=" available"]', { timeout: 60_000 });
+  await sleep(600);
   await shot(page, "player-book-grid", "Book a court: club, date strip and the live court-by-hour grid with prices.", { viewport: "phone" });
-  const slots = await page.$$('button[aria-label$=" available"]');
-  await slots[Math.min(4, slots.length - 1)].click();
-  await page.waitForFunction(() => /EGP\s[\d,]+/.test(document.body.innerText) && !document.body.innerText.includes("No slot selected"), { timeout: 30_000 });
+  const selected = await pickBookableSlot(page);
+  if (!selected) throw new Error("No slot on the booking grid could be selected; is the demo database seeded?");
   await shot(page, "player-book-review", "Slot selected: duration chips and the price review bar with the pricing-rule breakdown.", { viewport: "phone" });
   const reviewBtn = await page.$$eval("button", (bs) => bs.findIndex((b) => b.textContent.trim() === "Review"));
   const buttons = await page.$$("button");

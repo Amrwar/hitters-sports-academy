@@ -328,66 +328,70 @@ function SlotGrid({ courts, selected, duration, spanIsFree, onSelect }: { courts
 
   useEffect(() => {
     const el = scroller.current;
-    if (!el || firstBookable < 1) return;
-    el.scrollLeft = Math.max(0, (firstBookable - 1) * 60); // 56px column + 4px gap, keeping one column of context
+    if (!el) return;
+    // Always assign, zero included: picking another date keeps the same scroller, so an early return here
+    // left the previous day's scroll position on a day whose first bookable hour is the opening hour.
+    el.scrollLeft = firstBookable > 0 ? (firstBookable - 1) * 60 : 0; // 56px column + 4px gap, one of context
   }, [firstBookable, courts]);
 
   return (
-    <div ref={scroller} className="overflow-x-auto no-scrollbar -mx-4 px-4">
-      <div className="min-w-max">
-        <div className="mb-2 grid gap-1" style={{ gridTemplateColumns: `88px repeat(${columns.length}, 56px)` }}>
-          <div className="sticky -left-4 z-20 -ml-4 bg-canvas pl-4" />
-          {columns.map((m) => (
-            <div key={m} className="text-center text-[11px] font-semibold tabular text-fg-subtle">
-              {minutesToHHMM(m)}
-            </div>
-          ))}
-        </div>
-        <div className="space-y-1.5">
-          {courts.map((c) => (
-            <div key={c.court.id} className="grid items-center gap-1" style={{ gridTemplateColumns: `88px repeat(${columns.length}, 56px)` }}>
-              <div className="sticky -left-4 z-20 -ml-4 bg-canvas py-0.5 pl-4 pr-2 shadow-[6px_0_6px_-6px_rgb(0_0_0/0.5)]">
-                <div className="truncate text-body-sm font-bold">{c.court.name}</div>
-                <div className="text-[11px] capitalize text-fg-subtle">{c.court.type.toLowerCase()}</div>
+    <>
+      <div ref={scroller} className="overflow-x-auto no-scrollbar -mx-4 px-4">
+        <div className="min-w-max">
+          <div className="mb-2 grid gap-1" style={{ gridTemplateColumns: `88px repeat(${columns.length}, 56px)` }}>
+            <div className="sticky -left-4 z-20 -ml-4 bg-canvas pl-4" />
+            {columns.map((m) => (
+              <div key={m} className="text-center text-[11px] font-semibold tabular text-fg-subtle">
+                {minutesToHHMM(m)}
               </div>
-              {columns.map((m) => {
-                const s = c.slots.find((x) => x.startMinutes === m);
-                if (!s) return <div key={m} className="h-10" />;
-                const isSel = selected?.courtId === c.court.id && selected.startMinutes === m;
-                const inSpan = selected?.courtId === c.court.id && m > selected.startMinutes && m < selected.startMinutes + duration;
-                const bookable = s.status === "available";
-                return (
-                  <button
-                    key={m}
-                    type="button"
-                    disabled={!bookable}
-                    aria-pressed={isSel}
-                    aria-label={`${c.court.name} ${minutesToHHMM(m)} ${s.status}`}
-                    title={s.reason ?? undefined}
-                    onClick={() => onSelect(c.court.id, m)}
-                    className={cn(
-                      "h-10 rounded-sm border text-[11px] font-semibold transition-all",
-                      isSel || inSpan ? "border-blue-300/60 bg-brand-gradient text-white shadow-glow-sm" : CELL[s.status],
-                      isSel && "scale-[1.04]",
-                      s.booking?.mine && "border-volt/50 text-volt",
-                    )}
-                  >
-                    {isSel ? "✓" : s.booking?.mine ? "You" : s.status === "available" && s.priceCents != null ? Math.round(s.priceCents / 100) : (CELL_MARK[s.status] ?? "")}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-        <div className="mt-3 flex flex-wrap gap-4 text-caption text-fg-muted">
-          <Legend className="border-line/10 bg-surface-2" label="Available, price in EGP" />
-          <Legend className="border-blue-300/60 bg-brand-gradient" label="Your selection" />
-          <Legend className="border-volt/50 bg-surface-2" label="Already yours" />
-          <Legend className="border-transparent bg-line/[0.08]" label="Taken or gone" />
-          <Legend className="border-warning/20 bg-warning/10" label="Court closed" />
+            ))}
+          </div>
+          <div className="space-y-1.5">
+            {courts.map((c) => (
+              <div key={c.court.id} className="grid items-center gap-1" style={{ gridTemplateColumns: `88px repeat(${columns.length}, 56px)` }}>
+                <div className="sticky -left-4 z-20 -ml-4 bg-canvas py-0.5 pl-4 pr-2 shadow-[6px_0_6px_-6px_rgb(0_0_0/0.5)]">
+                  <div className="truncate text-body-sm font-bold">{c.court.name}</div>
+                  <div className="text-[11px] capitalize text-fg-subtle">{c.court.type.toLowerCase()}</div>
+                </div>
+                {columns.map((m) => {
+                  const s = c.slots.find((x) => x.startMinutes === m);
+                  if (!s) return <div key={m} className="h-10" />;
+                  const isSel = selected?.courtId === c.court.id && selected.startMinutes === m;
+                  const inSpan = selected?.courtId === c.court.id && m > selected.startMinutes && m < selected.startMinutes + duration;
+                  const bookable = s.status === "available";
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      disabled={!bookable}
+                      aria-pressed={isSel}
+                      aria-label={`${c.court.name} ${minutesToHHMM(m)} ${s.status}`}
+                      title={s.reason ?? undefined}
+                      onClick={() => onSelect(c.court.id, m)}
+                      className={cn(
+                        "h-10 rounded-sm border text-[11px] font-semibold transition-all",
+                        isSel || inSpan ? "border-blue-300/60 bg-brand-gradient text-white shadow-glow-sm" : CELL[s.status],
+                        isSel && "scale-[1.04]",
+                        s.booking?.mine && "border-volt/50 text-volt",
+                      )}
+                    >
+                      {isSel ? "✓" : s.booking?.mine ? "You" : s.status === "available" && s.priceCents != null ? Math.round(s.priceCents / 100) : (CELL_MARK[s.status] ?? "")}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-    </div>
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-caption text-fg-muted">
+        <Legend className="border-line/10 bg-surface-2" label="Available, price in EGP" />
+        <Legend className="border-blue-300/60 bg-brand-gradient" label="Your selection" />
+        <Legend className="border-volt/50 bg-surface-2" label="Already yours" />
+        <Legend className="border-transparent bg-line/[0.08]" label="Taken or gone" />
+        <Legend className="border-warning/20 bg-warning/10" label="Court closed" />
+      </div>
+    </>
   );
 }
 
