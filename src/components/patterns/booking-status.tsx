@@ -27,6 +27,7 @@ export function BookingStatusBadge({ status, size }: { status: BookingStatus; si
 
 const PAY_TONE: Record<PaymentStatus, "success" | "warning" | "danger" | "neutral"> = {
   PAID: "success",
+  PARTIALLY_REFUNDED: "warning",
   PENDING: "warning",
   WAIVED: "neutral",
   REFUNDED: "neutral",
@@ -36,6 +37,7 @@ const PAY_TONE: Record<PaymentStatus, "success" | "warning" | "danger" | "neutra
 
 export const PAY_LABEL: Record<PaymentStatus, string> = {
   PAID: "Paid",
+  PARTIALLY_REFUNDED: "Part refunded",
   PENDING: "Pay at the venue",
   WAIVED: "Waived",
   REFUNDED: "Refunded",

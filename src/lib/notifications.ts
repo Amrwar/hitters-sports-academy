@@ -93,6 +93,17 @@ export const NOTIFICATION_CATALOG = {
   "message.new": { category: "MESSAGING", title: "{{sender}} in {{thread}}", body: "{{excerpt}}", channels: IN_APP, groupable: true, quietMinutes: 15, vars: ["sender", "thread", "excerpt"] },
   "message.reported": { category: "MESSAGING", title: "A message was reported", body: "{{reason}} · {{thread}}. Review it in Admin, Moderation.", channels: IN_APP, groupable: true, vars: ["reason", "thread"] },
   "message.removed": { category: "MESSAGING", title: "Your message was removed", body: "{{thread}}. Keep it civil and about the game.", channels: IN_APP, vars: ["thread"] },
+
+  /* ------------------------------------------------------------------ Billing */
+  "payment.received": { category: "BILLING", title: "Payment received \u00b7 {{amount}}", body: "Receipt {{number}}. Thank you.", channels: IN_APP_EMAIL, vars: ["amount", "number"] },
+  "payment.due": { category: "BILLING", title: "{{amount}} still to pay", body: "{{what}} \u00b7 {{number}}.{{dueSuffix}}", channels: IN_APP_EMAIL, quietMinutes: 24 * 60, vars: ["amount", "what", "number", "dueSuffix"] },
+  "payment.failed": { category: "BILLING", title: "That payment did not go through", body: "{{number}} \u00b7 {{amount}}.{{reasonSuffix}} Nothing has been charged.", channels: IN_APP_EMAIL, vars: ["number", "amount", "reasonSuffix"] },
+  "refund.issued": { category: "BILLING", title: "{{amount}} refunded", body: "{{what}} \u00b7 {{destination}}.{{reasonSuffix}}", channels: IN_APP_EMAIL, vars: ["amount", "what", "destination", "reasonSuffix"] },
+  "credit.added": { category: "BILLING", title: "{{amount}} added to your account", body: "{{reason}} Your balance is now {{balance}}.", channels: IN_APP_EMAIL, vars: ["amount", "reason", "balance"] },
+  "membership.activated": { category: "BILLING", title: "You are a {{plan}} member", body: "Runs to {{endsOn}}.{{benefitSuffix}}", channels: IN_APP_EMAIL, vars: ["plan", "endsOn", "benefitSuffix"] },
+  "membership.expiring": { category: "BILLING", title: "Your membership ends on {{endsOn}}", body: "{{plan}} \u00b7 renew to keep your member rates.", channels: IN_APP_EMAIL, quietMinutes: 7 * 24 * 60, vars: ["plan", "endsOn"] },
+  "membership.expired": { category: "BILLING", title: "Your membership has ended", body: "{{plan}} \u00b7 ended {{endsOn}}. Member rates no longer apply.", channels: IN_APP_EMAIL, vars: ["plan", "endsOn"] },
+  "membership.cancelled": { category: "BILLING", title: "Membership cancelled", body: "{{plan}}.{{refundSuffix}}", channels: IN_APP_EMAIL, vars: ["plan", "refundSuffix"] },
 } as const satisfies Record<string, NotificationDef>;
 
 export type NotificationType = keyof typeof NOTIFICATION_CATALOG;
@@ -105,6 +116,7 @@ export const NOTIFICATION_CATEGORIES: { value: NotificationCategory; label: stri
   { value: "TRAINING", label: "Coaching and academy", description: "Lessons, programs, packages and assessments." },
   { value: "ACADEMY", label: "Academy announcements", description: "News and notices from HITTERS." },
   { value: "MESSAGING", label: "Messages", description: "New messages in your game and program chats." },
+  { value: "BILLING", label: "Payments and membership", description: "Receipts, balances, refunds, credit and your membership." },
 ];
 
 export const CATEGORY_LABEL: Record<NotificationCategory, string> = Object.fromEntries(NOTIFICATION_CATEGORIES.map((c) => [c.value, c.label])) as Record<NotificationCategory, string>;

@@ -156,17 +156,107 @@ enum ParticipantStatus {
 enum PaymentStatus {
   PENDING
   PAID
+  PARTIALLY_REFUNDED
   REFUNDED
   WAIVED
   CANCELLED
   FAILED
 }
 
+/// How the money physically moved. The gateway, if any, is Payment.provider; "CARD" says nothing about
+/// whether it was taken at the desk or online.
 enum PaymentMethod {
   NONE
   CASH
   CARD
   WALLET
+  TRANSFER
+  /// Settled from the player's academy credit balance rather than new money.
+  CREDIT
+}
+
+/// State of one attempt to take money through a provider. Only a provider confirmation moves an intent to
+/// SUCCEEDED; nothing the browser reports can.
+enum PaymentIntentStatus {
+  REQUIRES_ACTION
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PART_PAID
+  PAID
+  VOID
+  REFUNDED
+}
+
+enum InvoiceLineKind {
+  COURT
+  LESSON
+  PROGRAM
+  PACKAGE
+  MEMBERSHIP
+  /// Cancellation and no-show charges.
+  FEE
+  /// Always negative.
+  DISCOUNT
+  /// Always negative: academy credit applied to the invoice.
+  CREDIT
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum RefundDestination {
+  /// Back through the provider that took the money.
+  ORIGINAL
+  /// To the player's academy credit balance.
+  CREDIT
+  /// Handed back at the desk.
+  CASH
+}
+
+enum CreditEntryKind {
+  TOPUP
+  REFUND
+  ADJUSTMENT
+  SPEND
+  EXPIRY
+}
+
+/// States of one paid membership term. Distinct from MembershipStatus, which belongs to StaffMembership.
+enum MembershipTermStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum BillingPeriod {
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+}
+
+enum CouponKind {
+  PERCENT
+  FIXED
+}
+
+/// What a club accepts. ONLINE alone means a booking is not confirmed until the money arrives.
+enum PaymentTiming {
+  AT_CLUB
+  ONLINE
+  BOTH
 }
 
 enum NotificationChannel {
@@ -193,6 +283,7 @@ enum NotificationCategory {
   TRAINING
   ACADEMY
   MESSAGING
+  BILLING
 }
 
 enum MessageThreadKind {
@@ -409,6 +500,18 @@ model User {
   reportsReviewed         MessageReport[]          @relation("ReportReviewedBy")
   threadsLocked           MessageThread[]          @relation("ThreadLockedBy")
   academySettingsUpdated  AcademySettings[]        @relation("AcademySettingsUpdatedBy")
+  invoices                Invoice[]                @relation("InvoicePlayer")
+  invoicesCreated         Invoice[]                @relation("InvoiceCreatedBy")
+  paymentsMade            Payment[]                @relation("PaymentPayer")
+  paymentsReceived        Payment[]                @relation("PaymentReceivedBy")
+  paymentIntents          PaymentIntent[]          @relation("IntentCreatedBy")
+  refundsRequested        Refund[]                 @relation("RefundRequestedBy")
+  creditAccount           CreditAccount?
+  creditEntries           CreditEntry[]            @relation("CreditEntryCreatedBy")
+  memberships_            Membership[]             @relation("MembershipPlayer")
+  membershipsCreated      Membership[]             @relation("MembershipCreatedBy")
+  couponsCreated          Coupon[]                 @relation("CouponCreatedBy")
+  couponRedemptions       CouponRedemption[]       @relation("CouponRedemptionPlayer")
 
   @@index([status])
   @@index([globalRole])
@@ -613,6 +716,11 @@ model Location {
   homePlayers         PlayerProfile[]
   preferredBy         PlayerProfile[]       @relation("PreferredLocations")
   auditLogs           AuditLog[]
+  invoices            Invoice[]
+  payments            Payment[]
+  paymentPolicy       PaymentPolicy?
+  membershipPlans     MembershipPlan[]
+  coupons             Coupon[]
 
   @@index([status])
   @@index([city])
@@ -780,6 +888,7 @@ model Booking {
   rescheduledTo   Booking?             @relation("Reschedule")
   participants    BookingParticipant[]
   payments        Payment[]
+  invoices        Invoice[]
   gameSession     GameSession?
 
   @@index([courtId, startsAt])
@@ -808,33 +917,60 @@ model BookingParticipant {
 /// Money owed or taken for a booking. No provider is connected yet: records are created PENDING
 /// and settled by staff (cash/card at venue) until online payments ship.
 /// Money owed or taken for a booking, a lesson, a program enrollment or a package. Exactly one target is set.
+/// Money arriving for something. A payment never carries card details: `provider` and `providerRef` are
+/// the only link to the gateway, and the gateway holds the instrument.
+///
+/// The entity columns (bookingId, lessonId, ...) say what was paid for and are what the booking, lesson and
+/// enrollment screens read. The invoice says what was owed. Both are written together by
+/// `src/server/services/payments.ts`, which is the only writer; nothing else may create a Payment row.
 model Payment {
-  id           String        @id @default(cuid())
-  bookingId    String?
-  lessonId     String?
-  enrollmentId String?
-  purchaseId   String?
-  amountCents  Int
-  currency     String        @default("EGP")
-  status       PaymentStatus @default(PENDING)
-  method       PaymentMethod @default(NONE)
-  provider     String?
-  providerRef  String?
-  paidAt       DateTime?
-  refundedAt   DateTime?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  invoiceId      String?
+  intentId       String?
+  bookingId      String?
+  lessonId       String?
+  enrollmentId   String?
+  purchaseId     String?
+  membershipId   String?
+  payerId        String?
+  locationId     String?
+  amountCents    Int
+  currency       String        @default("EGP")
+  status         PaymentStatus @default(PENDING)
+  method         PaymentMethod @default(NONE)
+  provider       String?
+  providerRef    String?
+  /// Caller-supplied key that makes taking this payment safe to retry. Unique across every payment.
+  idempotencyKey String?       @unique
+  /// Free-text reference a receptionist can tie to a till slip or a transfer.
+  reference      String?       @db.VarChar(120)
+  note           String?       @db.VarChar(300)
+  receivedById   String?
+  paidAt         DateTime?
+  refundedAt     DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
+  invoice    Invoice?           @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  intent     PaymentIntent?     @relation(fields: [intentId], references: [id], onDelete: SetNull)
   booking    Booking?           @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   lesson     Lesson?            @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   enrollment ProgramEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   purchase   PackagePurchase?   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  membership Membership?        @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  payer      User?              @relation("PaymentPayer", fields: [payerId], references: [id], onDelete: SetNull)
+  receivedBy User?              @relation("PaymentReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
+  location   Location?          @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  refunds    Refund[]
 
   @@index([bookingId])
   @@index([lessonId])
   @@index([enrollmentId])
   @@index([purchaseId])
+  @@index([invoiceId])
   @@index([status])
+  @@index([locationId, paidAt(sort: Desc)])
+  @@index([payerId, createdAt(sort: Desc)])
 }
 
 // ---------------------------------------------------------------- Games
@@ -914,6 +1050,7 @@ model GameParticipant {
   user      User        @relation("GameParticipantUser", fields: [userId], references: [id], onDelete: Cascade)
   invitedBy User?       @relation("GameParticipantInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
   pair      Pair?       @relation("ParticipantPair", fields: [pairId], references: [id], onDelete: SetNull)
+  invoices  Invoice[]
 
   @@unique([sessionId, userId])
   @@index([userId, status])
@@ -1114,6 +1251,7 @@ model Lesson {
   rescheduledFrom Lesson?            @relation("LessonReschedule", fields: [rescheduledFromId], references: [id], onDelete: SetNull)
   rescheduledTo   Lesson?            @relation("LessonReschedule")
   payments        Payment[]
+  invoices        Invoice[]
   redemption      PackageRedemption?
   notes           ProgressNote[]
 
@@ -1226,6 +1364,7 @@ model ProgramEnrollment {
   createdBy  User?               @relation("EnrollmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   attendance ProgramAttendance[]
   payments   Payment[]
+  invoices   Invoice[]
 
   @@unique([programId, playerId])
   @@index([playerId, status])
@@ -1294,6 +1433,7 @@ model PackagePurchase {
   createdBy   User?               @relation("PurchaseCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   redemptions PackageRedemption[]
   payments    Payment[]
+  invoices    Invoice[]
 
   @@index([playerId, status])
 }
@@ -1495,4 +1635,355 @@ model AuditLog {
   @@index([actorId, createdAt(sort: Desc)])
   @@index([locationId, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
+}
+
+// ---------------------------------------------------------------- Money: invoices, payments, refunds, credit
+
+/// What someone owes, and the only source of truth for "outstanding". Exactly one subject column is set,
+/// naming what the invoice is for; the lines say how the total was reached.
+///
+/// subtotal - discount - credit = total, and total - paid - refunded is what is still due. Those cached
+/// figures are recomputed by `recalculateInvoice` inside the same transaction as every payment, refund and
+/// line change; no other code writes them.
+model Invoice {
+  id                String        @id @default(cuid())
+  number            String        @unique
+  playerId          String?
+  /// A walk-in has no account, so the desk still gets a receipt with a name on it.
+  guestName         String?       @db.VarChar(120)
+  guestPhone        String?       @db.VarChar(40)
+  locationId        String?
+  currency          String        @default("EGP") @db.VarChar(8)
+  subtotalCents     Int           @default(0)
+  discountCents     Int           @default(0)
+  creditCents       Int           @default(0)
+  totalCents        Int           @default(0)
+  paidCents         Int           @default(0)
+  refundedCents     Int           @default(0)
+  status            InvoiceStatus @default(DRAFT)
+  /// Set when the policy takes a deposit: the part of the total due before the booking is confirmed.
+  depositCents      Int           @default(0)
+  dueAt             DateTime?
+  issuedAt          DateTime?
+  paidAt            DateTime?
+  voidedAt          DateTime?
+  voidReason        String?       @db.VarChar(300)
+  note              String?       @db.VarChar(500)
+  bookingId         String?
+  lessonId          String?
+  enrollmentId      String?
+  purchaseId        String?
+  membershipId      String?
+  /// A player's share of a game whose cost is split.
+  gameParticipantId String?
+  couponId          String?
+  createdById       String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  player          User?              @relation("InvoicePlayer", fields: [playerId], references: [id], onDelete: SetNull)
+  location        Location?          @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  createdBy       User?              @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  booking         Booking?           @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  lesson          Lesson?            @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  enrollment      ProgramEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  purchase        PackagePurchase?   @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  membership      Membership?        @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  gameParticipant GameParticipant?   @relation(fields: [gameParticipantId], references: [id], onDelete: Cascade)
+  coupon          Coupon?            @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  lines           InvoiceLine[]
+  payments        Payment[]
+  refunds         Refund[]
+  intents         PaymentIntent[]
+  creditEntries   CreditEntry[]
+  redemption      CouponRedemption?
+
+  @@index([playerId, createdAt(sort: Desc)])
+  @@index([locationId, status])
+  @@index([status, dueAt])
+  @@index([bookingId])
+  @@index([lessonId])
+  @@index([enrollmentId])
+  @@index([purchaseId])
+  @@index([membershipId])
+}
+
+/// One line of an invoice. DISCOUNT and CREDIT lines carry a negative amount, so the lines always sum to
+/// the total and a receipt can be printed straight from them.
+model InvoiceLine {
+  id          String          @id @default(cuid())
+  invoiceId   String
+  kind        InvoiceLineKind
+  description String          @db.VarChar(200)
+  quantity    Int             @default(1)
+  unitCents   Int
+  amountCents Int
+  sortOrder   Int             @default(0)
+  createdAt   DateTime        @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId, sortOrder])
+}
+
+/// One attempt to collect money through a provider.
+///
+/// The browser is never believed: a return from a checkout page only ever moves an intent to PROCESSING.
+/// SUCCEEDED is written by `settleIntent`, which runs from a verified webhook or a server-side status
+/// fetch. `idempotencyKey` is sent to the provider and stored here, so a retried call reuses the attempt
+/// instead of charging twice.
+model PaymentIntent {
+  id             String              @id @default(cuid())
+  invoiceId      String
+  provider       String              @db.VarChar(40)
+  /// The provider's own id for this attempt. Null until the provider has been called.
+  providerRef    String?             @db.VarChar(200)
+  amountCents    Int
+  currency       String              @default("EGP") @db.VarChar(8)
+  status         PaymentIntentStatus @default(REQUIRES_ACTION)
+  idempotencyKey String              @unique
+  /// Where the provider sends the player back. Never trusted for the outcome.
+  returnUrl      String?             @db.VarChar(500)
+  checkoutUrl    String?             @db.VarChar(1000)
+  failureCode    String?             @db.VarChar(80)
+  failureMessage String?             @db.VarChar(300)
+  expiresAt      DateTime?
+  confirmedAt    DateTime?
+  /// Provider handles only. A card number, CVV or full PAN must never reach this column.
+  metadata       Json?
+  createdById    String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  invoice   Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  createdBy User?     @relation("IntentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  payments  Payment[]
+
+  @@unique([provider, providerRef])
+  @@index([invoiceId, createdAt(sort: Desc)])
+  @@index([status])
+}
+
+/// Every inbound provider callback, stored before it is acted on.
+///
+/// The unique key is the provider's own event id, so a provider that retries a webhook (all of them do)
+/// cannot pay an invoice twice: the second delivery finds the row and stops.
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  provider    String    @db.VarChar(40)
+  eventId     String    @db.VarChar(200)
+  type        String    @db.VarChar(120)
+  /// SHA-256 of the exact bytes received, so a replay with a tampered body is visible.
+  payloadHash String    @db.VarChar(64)
+  payload     Json
+  signatureOk Boolean   @default(false)
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  error       String?   @db.VarChar(500)
+
+  @@unique([provider, eventId])
+  @@index([processedAt])
+  @@index([receivedAt(sort: Desc)])
+}
+
+/// Money going back out. Separate from Payment because a refund has its own lifecycle, its own provider
+/// call and its own authorisation; a payment is never edited into a refund.
+model Refund {
+  id             String            @id @default(cuid())
+  invoiceId      String
+  paymentId      String?
+  amountCents    Int
+  currency       String            @default("EGP") @db.VarChar(8)
+  destination    RefundDestination @default(ORIGINAL)
+  status         RefundStatus      @default(PENDING)
+  reason         String?           @db.VarChar(300)
+  provider       String?           @db.VarChar(40)
+  providerRef    String?           @db.VarChar(200)
+  idempotencyKey String            @unique
+  failureMessage String?           @db.VarChar(300)
+  requestedById  String?
+  settledAt      DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  invoice     Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  payment     Payment?     @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  requestedBy User?        @relation("RefundRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  creditEntry CreditEntry?
+
+  @@index([invoiceId])
+  @@index([status, createdAt(sort: Desc)])
+}
+
+/// A player's academy credit, in money. Distinct from a package's lesson credits, which are counted in
+/// lessons and only spend on that package's coach.
+model CreditAccount {
+  id           String   @id @default(cuid())
+  playerId     String   @unique
+  currency     String   @default("EGP") @db.VarChar(8)
+  /// Cached sum of the entries, written in the same transaction as each entry. The ledger is authoritative.
+  balanceCents Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  player  User          @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  entries CreditEntry[]
+}
+
+/// Append-only. Entries are never edited or deleted; a mistake is corrected with an opposing ADJUSTMENT.
+model CreditEntry {
+  id                String          @id @default(cuid())
+  accountId         String
+  kind              CreditEntryKind
+  /// Signed: positive adds to the balance, negative spends it.
+  amountCents       Int
+  balanceAfterCents Int
+  reason            String?         @db.VarChar(300)
+  invoiceId         String?
+  refundId          String?         @unique
+  createdById       String?
+  createdAt         DateTime        @default(now())
+
+  account   CreditAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  invoice   Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  refund    Refund?       @relation(fields: [refundId], references: [id], onDelete: SetNull)
+  createdBy User?         @relation("CreditEntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([accountId, createdAt(sort: Desc)])
+}
+
+// ---------------------------------------------------------------- Memberships and coupons
+
+/// What a membership costs and what it gives. `key` is the tier a MEMBERSHIP_DISCOUNT pricing rule matches,
+/// so the discount on court bookings is configured where every other price is.
+model MembershipPlan {
+  id                  String        @id @default(cuid())
+  key                 String        @unique @db.VarChar(40)
+  name                String        @db.VarChar(80)
+  description         String?       @db.VarChar(500)
+  priceCents          Int
+  currency            String        @default("EGP") @db.VarChar(8)
+  period              BillingPeriod @default(MONTHLY)
+  benefits            String[]      @default([])
+  /// Academy credit granted at the start of every period.
+  periodCreditCents   Int           @default(0)
+  freeAssessments     Int           @default(0)
+  /// Extra days of the booking window, over the club's own advanceBookingDays.
+  priorityBookingDays Int           @default(0)
+  /// null = sold at every club.
+  locationId          String?
+  active              Boolean       @default(true)
+  sortOrder           Int           @default(0)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  location    Location?    @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  memberships Membership[]
+
+  @@index([active, sortOrder])
+}
+
+/// One player's term on a plan. A term is a dated period, so a membership bought at the desk and one that
+/// renews itself are the same record; `autoRenew` only decides whether the next term is created.
+model Membership {
+  id           String               @id @default(cuid())
+  code         String               @unique
+  playerId     String
+  planId       String
+  status       MembershipTermStatus @default(PENDING)
+  startsOn     DateTime             @db.Date
+  endsOn       DateTime             @db.Date
+  autoRenew    Boolean              @default(false)
+  cancelledAt  DateTime?
+  cancelReason String?              @db.VarChar(300)
+  createdById  String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  player    User           @relation("MembershipPlayer", fields: [playerId], references: [id], onDelete: Cascade)
+  plan      MembershipPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  createdBy User?          @relation("MembershipCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  invoices  Invoice[]
+  payments  Payment[]
+
+  @@index([playerId, status])
+  @@index([status, endsOn])
+}
+
+/// A code that takes money off an invoice. Percent coupons may be capped; both kinds may be limited to
+/// certain line kinds, a club, a window, a total number of uses and a number of uses per player.
+model Coupon {
+  id               String            @id @default(cuid())
+  code             String            @unique @db.VarChar(40)
+  name             String            @db.VarChar(120)
+  kind             CouponKind
+  /// PERCENT: 1 to 100. FIXED: an amount in cents.
+  value            Int
+  maxDiscountCents Int?
+  minSpendCents    Int?
+  /// Empty = anything on the invoice.
+  appliesTo        InvoiceLineKind[] @default([])
+  locationId       String?
+  validFrom        DateTime?
+  validTo          DateTime?
+  maxRedemptions   Int?
+  maxPerPlayer     Int               @default(1)
+  /// Cached count of redemptions, incremented in the same transaction as each one.
+  redeemedCount    Int               @default(0)
+  active           Boolean           @default(true)
+  createdById      String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  location    Location?          @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  createdBy   User?              @relation("CouponCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  invoices    Invoice[]
+  redemptions CouponRedemption[]
+
+  @@index([active, validTo])
+}
+
+/// Append-only proof that a coupon was used, one per invoice, so a per-player limit can be enforced and a
+/// coupon's real cost can be reported.
+model CouponRedemption {
+  id          String   @id @default(cuid())
+  couponId    String
+  playerId    String?
+  invoiceId   String   @unique
+  amountCents Int
+  createdAt   DateTime @default(now())
+
+  coupon  Coupon  @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  player  User?   @relation("CouponRedemptionPlayer", fields: [playerId], references: [id], onDelete: SetNull)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([couponId, playerId])
+}
+
+// ---------------------------------------------------------------- Payment policy
+
+/// When and how a club takes money, and what it keeps when a player cancels.
+/// The row with a null locationId is the academy default; a row with a locationId overrides it for that club.
+model PaymentPolicy {
+  id                      String            @id @default(cuid())
+  locationId              String?           @unique
+  timing                  PaymentTiming     @default(AT_CLUB)
+  /// Percent of the total taken up front when paying online. 0 = the whole amount.
+  depositPercent          Int               @default(0)
+  /// Percent of the total kept when a player cancels after the club's cancellation cutoff.
+  lateCancellationPercent Int               @default(0)
+  /// Percent kept when a player simply does not turn up.
+  noShowPercent           Int               @default(0)
+  refundDestination       RefundDestination @default(ORIGINAL)
+  /// Hours before the start after which a cancellation is refunded nothing at all.
+  refundCutoffHours       Int               @default(0)
+  /// How a game's cost is divided unless its organizer chooses otherwise.
+  defaultGameCostMode     GameCostMode      @default(SPLIT_EVENLY)
+  /// Whether players may pay from their academy credit balance.
+  allowCredit             Boolean           @default(true)
+  updatedById             String?
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  location Location? @relation(fields: [locationId], references: [id], onDelete: Cascade)
 }

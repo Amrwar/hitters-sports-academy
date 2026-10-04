@@ -597,3 +597,129 @@ export const academySettingsSchema = z.object({
   currency: z.string().trim().toUpperCase().min(2).max(8),
   cancellationPolicy: z.string().trim().min(10).max(600),
 });
+
+/* ------------------------------------------------------------------ Money (phase: financial system) */
+
+const centsSchema = z.coerce.number().int("Enter a whole amount.").min(0, "Cannot be negative.").max(100_000_000);
+const percentSchema = z.coerce.number().int().min(0, "Cannot be negative.").max(100, "Cannot be more than 100%.");
+
+export const paymentPolicySchema = z.object({
+  timing: z.enum(["AT_CLUB", "ONLINE", "BOTH"]),
+  depositPercent: percentSchema.default(0),
+  lateCancellationPercent: percentSchema.default(0),
+  noShowPercent: percentSchema.default(0),
+  refundDestination: z.enum(["ORIGINAL", "CREDIT", "CASH"]).default("ORIGINAL"),
+  refundCutoffHours: z.coerce.number().int().min(0).max(168).default(0),
+  defaultGameCostMode: z.enum(["FREE", "SPLIT_EVENLY", "ORGANIZER_PAYS", "FIXED_PER_PLAYER"]).default("SPLIT_EVENLY"),
+  allowCredit: z.coerce.boolean().default(true),
+});
+
+/** Taking money at the desk. The amount is optional: left out, it settles whatever is still due. */
+export const takePaymentSchema = z.object({
+  method: z.enum(["CASH", "CARD", "WALLET", "TRANSFER"]),
+  amountCents: centsSchema.optional(),
+  reference: z.string().trim().max(120).optional().or(z.literal("").transform(() => undefined)),
+  note: z.string().trim().max(300).optional().or(z.literal("").transform(() => undefined)),
+  /** Marks the balance as not owed rather than collected. Used for comps and goodwill. */
+  waive: z.coerce.boolean().default(false),
+});
+
+export const startOnlinePaymentSchema = z.object({
+  /** Pay the deposit the policy asks for, or the whole balance. */
+  portion: z.enum(["DEPOSIT", "FULL"]).default("FULL"),
+  returnUrl: z.string().trim().url().max(500).optional(),
+});
+
+export const refundSchema = z.object({
+  amountCents: centsSchema.optional(),
+  destination: z.enum(["ORIGINAL", "CREDIT", "CASH"]).optional(),
+  reason: z.string().trim().max(300).optional().or(z.literal("").transform(() => undefined)),
+});
+
+export const creditAdjustmentSchema = z.object({
+  /** Signed: a negative amount takes credit away, which is why this is not `centsSchema`. */
+  amountCents: z.coerce.number().int().min(-100_000_000).max(100_000_000).refine((v) => v !== 0, "Enter an amount."),
+  reason: z.string().trim().min(3, "Say why; this is on the player's statement.").max(300),
+});
+
+export const couponSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .min(3)
+    .max(40)
+    .regex(/^[A-Z0-9][A-Z0-9-]*$/, "Use letters, numbers and dashes."),
+  name: z.string().trim().min(2).max(120),
+  kind: z.enum(["PERCENT", "FIXED"]),
+  value: z.coerce.number().int().min(1, "Enter a value."),
+  maxDiscountCents: centsSchema.nullable().optional(),
+  minSpendCents: centsSchema.nullable().optional(),
+  appliesTo: z.array(z.enum(["COURT", "LESSON", "PROGRAM", "PACKAGE", "MEMBERSHIP", "FEE"])).default([]),
+  locationId: z.string().cuid().nullable().optional(),
+  validFrom: z.coerce.date().nullable().optional(),
+  validTo: z.coerce.date().nullable().optional(),
+  maxRedemptions: z.coerce.number().int().min(1).max(1_000_000).nullable().optional(),
+  maxPerPlayer: z.coerce.number().int().min(1).max(1000).default(1),
+  active: z.coerce.boolean().default(true),
+});
+
+export const couponCodeSchema = z.object({ code: z.string().trim().toUpperCase().min(3).max(40) });
+
+export const membershipPlanSchema = z.object({
+  key: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .min(2)
+    .max(40)
+    .regex(/^[A-Z0-9_]+$/, "Use capital letters, numbers and underscores."),
+  name: z.string().trim().min(2).max(80),
+  description: z.string().trim().max(500).optional().or(z.literal("").transform(() => undefined)),
+  priceCents: centsSchema,
+  period: z.enum(["MONTHLY", "QUARTERLY", "ANNUAL"]).default("MONTHLY"),
+  benefits: z.array(z.string().trim().min(2).max(120)).max(12).default([]),
+  periodCreditCents: centsSchema.default(0),
+  freeAssessments: z.coerce.number().int().min(0).max(12).default(0),
+  priorityBookingDays: z.coerce.number().int().min(0).max(90).default(0),
+  locationId: z.string().cuid().nullable().optional(),
+  active: z.coerce.boolean().default(true),
+  sortOrder: z.coerce.number().int().min(0).max(999).default(0),
+});
+
+export const buyMembershipSchema = z.object({
+  planId: z.string().cuid(),
+  /** Staff may start a term on a chosen date; a player always starts today. */
+  startsOn: dateISOSchema.optional(),
+  autoRenew: z.coerce.boolean().default(false),
+  playerId: z.string().cuid().optional(),
+});
+
+export const cancelMembershipSchema = z.object({
+  reason: z.string().trim().max(300).optional().or(z.literal("").transform(() => undefined)),
+  /** Ends the term now and refunds the unused part, rather than simply not renewing. */
+  immediate: z.coerce.boolean().default(false),
+});
+
+export const invoiceListSchema = z.object({
+  locationId: z.string().cuid().optional(),
+  status: z.enum(["DRAFT", "ISSUED", "PART_PAID", "PAID", "VOID", "REFUNDED"]).optional(),
+  playerId: z.string().cuid().optional(),
+  q: z.string().trim().max(80).optional(),
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  outstandingOnly: z.coerce.boolean().default(false),
+  take: z.coerce.number().int().min(1).max(200).default(50),
+  skip: z.coerce.number().int().min(0).max(100_000).default(0),
+});
+
+export const financeReportSchema = z.object({
+  locationId: z.string().cuid().optional(),
+  weeks: z.coerce.number().int().min(1).max(52).default(8),
+});
+
+/** How a game's cost is divided, chosen by the organizer within what the club allows. */
+export const gameCostSchema = z.object({
+  costMode: z.enum(["FREE", "SPLIT_EVENLY", "ORGANIZER_PAYS", "FIXED_PER_PLAYER"]),
+  costPerPlayerCents: centsSchema.nullable().optional(),
+});

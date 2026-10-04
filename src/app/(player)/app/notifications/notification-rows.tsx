@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, BellRing, CalendarCheck, CheckCheck, GraduationCap, Megaphone, MessageSquare, Users } from "lucide-react";
+import { Bell, BellRing, CalendarCheck, CheckCheck, GraduationCap, Megaphone, MessageSquare, Users, Wallet } from "lucide-react";
 import type { NotificationCategory } from "@prisma/client";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ const icon: Record<NotificationCategory, React.ReactNode> = {
   TRAINING: <GraduationCap />,
   ACADEMY: <Megaphone />,
   MESSAGING: <MessageSquare />,
+  BILLING: <Wallet />,
 };
 
 /** One row in the centre. Tapping it marks the whole group read, then follows the link. */

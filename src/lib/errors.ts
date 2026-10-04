@@ -18,7 +18,14 @@ export type ErrorCode =
   | "INVALID_TRANSITION"
   | "NOT_ELIGIBLE"
   | "PROGRAM_FULL"
-  | "NO_CREDITS";
+  | "NO_CREDITS"
+  // Money
+  | "PAYMENT_FAILED"
+  | "PAYMENT_REQUIRED"
+  | "ALREADY_PAID"
+  | "REFUND_NOT_ALLOWED"
+  | "PROVIDER_UNAVAILABLE"
+  | "COUPON_INVALID";
 
 const STATUS: Record<ErrorCode, number> = {
   UNAUTHENTICATED: 401,
@@ -39,6 +46,12 @@ const STATUS: Record<ErrorCode, number> = {
   NOT_ELIGIBLE: 409,
   PROGRAM_FULL: 409,
   NO_CREDITS: 409,
+  PAYMENT_FAILED: 402,
+  PAYMENT_REQUIRED: 402,
+  ALREADY_PAID: 409,
+  REFUND_NOT_ALLOWED: 409,
+  PROVIDER_UNAVAILABLE: 503,
+  COUPON_INVALID: 400,
 };
 
 /** Domain error carried from services to actions and route handlers. */
@@ -61,6 +74,12 @@ export const forbidden = (msg = "You don't have permission to do that.") => new 
 export const notFound = (what = "Resource") => new AppError("NOT_FOUND", `${what} not found.`);
 export const conflict = (msg: string) => new AppError("CONFLICT", msg);
 export const validation = (msg: string, fields?: Record<string, string>) => new AppError("VALIDATION", msg, fields);
+export const paymentFailed = (msg: string) => new AppError("PAYMENT_FAILED", msg);
+export const paymentRequired = (msg: string) => new AppError("PAYMENT_REQUIRED", msg);
+export const alreadyPaid = (msg = "That has already been paid.") => new AppError("ALREADY_PAID", msg);
+export const refundNotAllowed = (msg: string) => new AppError("REFUND_NOT_ALLOWED", msg);
+export const providerUnavailable = (msg = "Online payment is not available right now.") => new AppError("PROVIDER_UNAVAILABLE", msg);
+export const couponInvalid = (msg: string) => new AppError("COUPON_INVALID", msg);
 
 export function isAppError(e: unknown): e is AppError {
   return e instanceof AppError;
