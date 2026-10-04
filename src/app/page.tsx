@@ -140,7 +140,8 @@ export default async function LandingPage() {
           </div>
           {/* A picture of the product, not a working control: nothing inside is clickable. */}
           <div className="relative" aria-hidden>
-            <div className="absolute -inset-6 rounded-[40px] bg-blue-500/20 blur-3xl" />
+            {/* Decorative glow. It keeps its vertical bleed but must not widen the page on a phone, where the card already sits against the gutter. */}
+            <div className="absolute -inset-y-6 inset-x-0 rounded-[40px] bg-blue-500/20 blur-3xl sm:-inset-x-6" />
             <Card variant="glass" padding="lg" className="relative rounded-2xl">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-caption text-blue-100/70">

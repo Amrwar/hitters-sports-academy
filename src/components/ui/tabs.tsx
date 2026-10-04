@@ -21,8 +21,10 @@ export function Tabs<T extends string>({ items, value, onChange, variant = "unde
     <div
       role="tablist"
       className={cn(
-        "flex gap-1",
-        isPill ? "rounded-md bg-surface-2 p-1 border border-line/10" : "border-b border-line/10 overflow-x-auto no-scrollbar",
+        // Both variants scroll rather than widen the page: three tabs with counts do not fit a 390px phone,
+        // and a segmented control that overflows pushes a horizontal scrollbar onto the whole document.
+        "flex gap-1 overflow-x-auto no-scrollbar",
+        isPill ? "rounded-md border border-line/10 bg-surface-2 p-1" : "border-b border-line/10",
         className,
       )}
     >
@@ -40,9 +42,9 @@ export function Tabs<T extends string>({ items, value, onChange, variant = "unde
               "inline-flex items-center justify-center gap-2 whitespace-nowrap font-semibold transition-all duration-200 disabled:opacity-45 [&_svg]:size-4",
               fullWidth && "flex-1",
               isPill
-                ? cn("h-9 rounded-sm px-3.5 text-body-sm", active ? "bg-brand-gradient text-white shadow-glow-sm" : "text-fg-muted hover:text-fg")
+                ? cn("h-9 shrink-0 rounded-sm px-3 text-body-sm sm:px-3.5", active ? "bg-brand-gradient text-white shadow-glow-sm" : "text-fg-muted hover:text-fg")
                 : cn(
-                    "-mb-px h-11 border-b-2 px-3 text-body-sm",
+                    "-mb-px h-11 shrink-0 border-b-2 px-3 text-body-sm",
                     active ? "border-blue-400 text-fg" : "border-transparent text-fg-muted hover:text-fg hover:border-line/30",
                   ),
             )}

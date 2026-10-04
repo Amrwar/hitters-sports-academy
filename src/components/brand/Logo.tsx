@@ -22,6 +22,7 @@ export function Monogram({ height = 24, className, glow, title = "HITTERS" }: Ma
       viewBox={`0 0 ${width} ${h}`}
       height={height}
       width={(height * width) / h}
+      preserveAspectRatio="xMidYMid meet"
       role="img"
       aria-label={title}
       className={cn("shrink-0 fill-current", glow && "drop-shadow-[0_0_14px_rgba(77,130,255,0.85)]", className)}
@@ -51,17 +52,23 @@ export function Wordmark({ height = 18, className, glow, title = "HITTERS" }: Ma
   );
 }
 
-/** Wordmark with the letter-spaced "SPORTS ACADEMY" tagline justified to the same width. */
+/**
+ * Wordmark with the letter-spaced "SPORTS ACADEMY" tagline justified to the same width.
+ *
+ * The mark is 10:1, so a height that looks modest turns into a very wide block: height 44 is 444px, wider
+ * than a phone. Everything here is sized in `em` off the wrapper's font-size, and the wrapper is capped at
+ * the width of its container, so the lockup shrinks to fit instead of bleeding off the screen.
+ */
 export function Lockup({ height = 28, className, glow }: MarkProps) {
   const width = (height * WORDMARK_VIEWBOX.width) / WORDMARK_VIEWBOX.height;
   const tagline = "SPORTS ACADEMY".split("");
   return (
-    <div className={cn("inline-flex flex-col items-stretch text-current", className)} style={{ width }}>
-      <Wordmark height={height} glow={glow} />
+    <div className={cn("inline-flex max-w-full flex-col items-stretch text-current", className)} style={{ width, fontSize: height }}>
+      <Wordmark height={height} glow={glow} className="h-auto w-full" />
       <div
         aria-hidden
         className="mt-[0.35em] flex justify-between px-[0.1em] font-sans font-medium leading-none"
-        style={{ fontSize: height * 0.42 }}
+        style={{ fontSize: "0.42em" }}
       >
         {tagline.map((c, i) => (
           <span key={i} className={c === " " ? "w-[0.3em]" : undefined}>

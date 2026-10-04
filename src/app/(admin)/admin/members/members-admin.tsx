@@ -15,7 +15,7 @@ import { Dropdown, type DropdownItem } from "@/components/ui/dropdown";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { StatTile } from "@/components/ui/misc";
 import { EmptyState } from "@/components/ui/states";
-import { TBody, TD, TH, THead, TR, Table, TableWrap } from "@/components/ui/table";
+import { TBody, TD, TDTight, TH, THead, TR, Table, TableWrap } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { ROLE_LABEL } from "@/lib/auth/permissions";
 import { LEVELS } from "@/lib/tokens";
@@ -67,7 +67,7 @@ export function MembersAdmin({ users, total, query, locations, canSuspend, canAs
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile size="lg" label="Visible members" value={total} />
         <StatTile size="lg" label="Staff accounts" value={staffCount} />
-        <StatTile size="lg" label="Awaiting assessment" value={unassessed} delta={unassessed ? { value: "Book assessments", positive: false } : undefined} />
+        <StatTile size="lg" label="Awaiting assessment" value={unassessed} delta={unassessed ? { value: "Book assessments" } : undefined} />
         <StatTile size="lg" label="Your clubs" value={<span className="text-h3">{me.isGlobal ? "All locations" : `${me.locationIds.length} location${me.locationIds.length === 1 ? "" : "s"}`}</span>} />
       </div>
 
@@ -130,8 +130,8 @@ export function MembersAdmin({ users, total, query, locations, canSuspend, canAs
                         </div>
                       </div>
                     </TD>
-                    <TD>{u.playerProfile?.level ? <LevelBadge level={u.playerProfile.level} size="sm" /> : <Badge size="sm">Unassessed</Badge>}</TD>
-                    <TD className="text-fg-muted">{u.playerProfile?.homeLocation?.name.replace("HITTERS ", "") ?? "—"}</TD>
+                    <TDTight className="w-px">{u.playerProfile?.level ? <LevelBadge level={u.playerProfile.level} size="sm" /> : <Badge size="sm">Unassessed</Badge>}</TDTight>
+                    <TDTight className="text-fg-muted">{u.playerProfile?.homeLocation?.name.replace("HITTERS ", "") ?? "—"}</TDTight>
                     <TD>
                       <div className="flex flex-wrap gap-1">
                         {u.globalRole && (
@@ -149,9 +149,16 @@ export function MembersAdmin({ users, total, query, locations, canSuspend, canAs
                         )}
                       </div>
                     </TD>
-                    <TD>
-                      <StatusBadge status={u.status === "ACTIVE" ? "active" : u.status === "SUSPENDED" ? "paused" : "expired"} />
-                    </TD>
+                    <TDTight>
+                      {u.status === "ACTIVE" ? (
+                        <span className="inline-flex items-center gap-1.5 text-body-sm text-fg-muted">
+                          <span className="size-1.5 rounded-full bg-success" />
+                          Active
+                        </span>
+                      ) : (
+                        <StatusBadge status={u.status === "SUSPENDED" ? "paused" : "expired"} />
+                      )}
+                    </TDTight>
                     <TD className="whitespace-nowrap text-fg-muted">{new Date(u.createdAt).toLocaleDateString("en", { month: "short", year: "numeric" })}</TD>
                     <TD className="w-12" onClick={(e) => e.stopPropagation()}>
                       {items.length > 0 && (
