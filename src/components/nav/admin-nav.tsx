@@ -210,6 +210,7 @@ export function AdminShell({ children, title, breadcrumb, actions }: { children:
               )}
               <h1 className="truncate text-h4 sm:text-h3">{title}</h1>
             </div>
+            {actions && <div className="hidden flex-wrap items-center gap-2 lg:flex">{actions}</div>}
             <AdminSearch />
             {me.openReports > 0 && (
               <IconButton variant="ghost" size="sm" label={`Moderation: ${me.openReports} reported message${me.openReports === 1 ? "" : "s"} waiting`} href="/admin/moderation" className="relative">
@@ -237,7 +238,8 @@ export function AdminShell({ children, title, breadcrumb, actions }: { children:
           </div>
         </header>
         <main className="mx-auto max-w-admin px-4 py-6 sm:px-6 lg:px-8">
-          {actions && <div className="mb-5 flex flex-wrap items-center justify-end gap-2">{actions}</div>}
+          {/* On narrow screens the header has no room, so the same actions ride above the content instead. */}
+          {actions && <div className="mb-5 flex flex-wrap items-center justify-end gap-2 lg:hidden">{actions}</div>}
           {children}
         </main>
       </div>

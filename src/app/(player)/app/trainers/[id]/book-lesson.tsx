@@ -101,7 +101,7 @@ export function BookLessonPanel({ trainer, locations, eligible, myLevel, credits
       <div className="mt-3 min-h-12">
         {pending && !day ? (
           <div className="flex items-center gap-2 text-body-sm text-fg-muted">
-            <Spinner size={16} /> Loading times
+            <Spinner size={16} /> Loading times…
           </div>
         ) : day && day.open && day.slots.some((s) => s.available) ? (
           <div className={`flex flex-wrap gap-2 ${pending ? "opacity-60" : ""}`}>
@@ -134,7 +134,7 @@ export function BookLessonPanel({ trainer, locations, eligible, myLevel, credits
       <Modal open={confirm} onClose={() => setConfirm(false)} title={trainer.autoConfirm ? "Confirm your lesson" : "Request this lesson"} description={`${trainer.name} · ${longDate(dateISO)} at ${start !== null ? minutesToHHMM(start) : ""} · ${duration} min`} size="sm">
         <form onSubmit={book} className="space-y-4 pb-2">
           {error && (
-            <Alert tone="danger" title="Could not book">
+            <Alert tone="danger" title="The lesson was not booked">
               {error}
             </Alert>
           )}

@@ -88,7 +88,7 @@ export function FindMatchView({ viewerId, viewerLevel, levelLabel, locations, de
       toast({ tone: "success", title: res.data.status === "WAITLISTED" ? "Added to the waitlist" : "Request sent", description: "The organizer decides who joins. Track it under Play › Requests." });
       setRequesting(null);
       router.push(`/app/play/${requesting.game.code}`);
-    } else toast({ tone: "danger", title: res.code === "NOT_ELIGIBLE" ? "Not eligible" : "Could not send", description: res.message });
+    } else toast({ tone: "danger", title: res.code === "NOT_ELIGIBLE" ? "This game is not a fit for you" : "The request was not sent", description: res.message });
   }
 
   return (

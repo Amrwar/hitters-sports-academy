@@ -7,6 +7,7 @@ import { accessibleLocationIds, can, requireActor, requirePermission, type Actor
 import { fieldErrors, packagePurchaseSchema, packageSchema, recordPaymentSchema } from "@/lib/validation/schemas";
 import { notify } from "./notifications";
 import { plural } from "@/lib/notifications";
+import { plainDate } from "@/lib/time";
 
 /* ------------------------------------------------------------------ Catalogue */
 
@@ -138,7 +139,7 @@ export async function purchasePackage(actor: Actor | null, input: unknown, opts:
     await audit({ actorId: a.id, action: "package.purchased", entityType: "PackagePurchase", entityId: p.id, locationId, metadata: { code: c, playerId, credits, priceCents, custom } }, tx);
     return view(p);
   });
-  await notify(playerId, { type: "package.purchased", url: "/app/packages", data: { package: name, credits, creditsPlural: plural(credits), expires: purchase.expiresAt.toISOString().slice(0, 10), purchaseId: purchase.id, code: purchase.code } });
+  await notify(playerId, { type: "package.purchased", url: "/app/packages", data: { package: name, credits, creditsPlural: plural(credits), expires: plainDate(purchase.expiresAt), purchaseId: purchase.id, code: purchase.code } });
   return purchase;
 }
 

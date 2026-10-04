@@ -248,7 +248,7 @@ export function NewGameForm({
         </section>
 
         {error && (
-          <Alert tone="danger" title="Could not create the game">
+          <Alert tone="danger" title="The game was not created">
             {error}
           </Alert>
         )}

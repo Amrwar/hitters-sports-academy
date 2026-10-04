@@ -61,7 +61,7 @@ export function Calendar({ value, onChange, min, marked = [], className }: Calen
               disabled={disabled}
               onClick={() => onChange?.(d)}
               aria-pressed={selected}
-              aria-label={d.toDateString()}
+              aria-label={d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}
               className={cn(
                 "relative mx-auto flex size-10 items-center justify-center rounded-sm text-body-sm font-semibold tabular transition-all",
                 "hover:bg-line/10 disabled:opacity-30 disabled:hover:bg-transparent",

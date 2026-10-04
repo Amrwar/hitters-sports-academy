@@ -54,7 +54,7 @@ export function ProgramsAdmin({ programs, trainers, locations, courts, levels, m
     const res = await fn();
     setBusy(null);
     if (res.ok) toast({ tone: "success", title: label });
-    else toast({ tone: "danger", title: "Could not do that", description: res.message });
+    else toast({ tone: "danger", title: "That did not go through", description: res.message });
     router.refresh();
     return res.ok;
   }

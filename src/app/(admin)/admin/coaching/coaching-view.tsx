@@ -55,7 +55,7 @@ export function CoachingView({ viewerId, levelLabels, trainer, clubs, selectedCl
     const res = await fn();
     setBusy(null);
     if (res.ok) toast({ tone: "success", title: label });
-    else toast({ tone: "danger", title: "Could not do that", description: res.message });
+    else toast({ tone: "danger", title: "That did not go through", description: res.message });
     router.refresh();
     return res.ok;
   }
@@ -392,7 +392,7 @@ function AvailabilityEditor({ trainer, clubs, onSaved }: { trainer: TrainerView;
       onSaved();
     } else {
       const failed = !res.ok ? res : !res2.ok ? res2 : null;
-      toast({ tone: "danger", title: "Could not save", description: failed?.message });
+      toast({ tone: "danger", title: "Nothing was saved", description: failed?.message });
     }
   }
 
@@ -449,7 +449,7 @@ function AvailabilityEditor({ trainer, clubs, onSaved }: { trainer: TrainerView;
               toast({ tone: "success", title: "Time off added" });
               setOff(false);
               onSaved();
-            } else toast({ tone: "danger", title: "Could not add", description: r.message });
+            } else toast({ tone: "danger", title: "Nothing was added", description: r.message });
           }}
         >
           <Field label="From">{(id) => <Input id={id} name="start" type="datetime-local" required defaultValue={`${addDaysISO(todayISO(tz), 1)}T09:00`} />}</Field>
@@ -479,7 +479,7 @@ function TrainerPrograms({ programs, levelLabels }: { programs: ProgramView[]; l
 
   async function openSession(program: ProgramView, sessionId: string) {
     const res = await listProgramEnrollmentsAction(program.id);
-    if (!res.ok) return toast({ tone: "danger", title: "Could not load roster", description: res.message });
+    if (!res.ok) return toast({ tone: "danger", title: "The roster did not load", description: res.message });
     const enrolled = res.data.filter((e) => e.status === "ENROLLED" || e.status === "COMPLETED");
     setRoster(enrolled);
     setMarks(Object.fromEntries(enrolled.map((e) => [e.id, e.attendance.find((a) => a.sessionId === sessionId)?.status ?? "PRESENT"])));
@@ -495,7 +495,7 @@ function TrainerPrograms({ programs, levelLabels }: { programs: ProgramView[]; l
       toast({ tone: "success", title: `Attendance saved for ${count(res.data.marked, "player")}` });
       setOpen(null);
       router.refresh();
-    } else toast({ tone: "danger", title: "Could not save", description: res.message });
+    } else toast({ tone: "danger", title: "Nothing was saved", description: res.message });
   }
 
   return (

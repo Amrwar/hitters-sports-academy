@@ -216,7 +216,7 @@ export function BookingsAdmin({ locations, selectedId, dateISO, status, query, r
                         </TD>
                         <TD>{b.court.name}</TD>
                         <TD className="whitespace-nowrap tabular">
-                          {formatInZone(new Date(b.startsAt), tz, { day: "numeric", month: "short" })} · {formatInZone(new Date(b.startsAt), tz, { hour: "2-digit", minute: "2-digit" })} · {b.durationMinutes}m
+                          {formatInZone(new Date(b.startsAt), tz, { day: "numeric", month: "short" })} · {formatInZone(new Date(b.startsAt), tz, { hour: "2-digit", minute: "2-digit" })} · {b.durationMinutes} min
                         </TD>
                         <TD>
                           <BookingStatusBadge status={b.status} />
@@ -249,7 +249,7 @@ export function BookingsAdmin({ locations, selectedId, dateISO, status, query, r
         <form onSubmit={submitCreate} className="grid gap-4 sm:grid-cols-2">
           {formError && (
             <div className="sm:col-span-2">
-              <Alert tone="danger" title={ERROR_TITLES[formError.code] ?? "Could not book"}>
+              <Alert tone="danger" title={ERROR_TITLES[formError.code] ?? "The booking did not go through"}>
                 {formError.message}
               </Alert>
             </div>

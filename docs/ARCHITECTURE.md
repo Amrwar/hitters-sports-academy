@@ -197,3 +197,53 @@ announcement is scoped to the sender's locations; only an academy-wide role may 
 Player: the notification centre with category filters and grouped rows, notification preferences, a messages
 list, and the chat embedded in the game and program pages. Admin: notification templates with a live preview
 and placeholder validation, the announcement composer, delivery health per channel, and the moderation queue.
+
+## Refinement pass — real data, no dead controls, human copy
+
+A sweep over the whole surface, after two audits of the running app.
+
+### Nothing fake is on screen
+
+The admin Analytics screen was invented numbers in a file. It is now `getAnalytics()` in
+`src/server/services/analytics.ts`: bookings, revenue, occupancy, matchmaking fill rate and academy
+occupancy, scoped to the locations the viewer may read, over a window of 4 to 26 weeks, with the same
+figures for the previous window so the change is real. The weekly series and the hour histogram are
+aggregated in SQL rather than loaded as rows, and the hour is converted to each club's own timezone, so an
+evening peak in Cairo does not appear two hours early because the instant is stored in UTC.
+
+The marketing site read a hardcoded list of clubs. It now calls `listPublicLocations()` and shows the live
+clubs, their active court counts and their real cheapest hourly rate. `src/data/mock.ts` is deleted, along
+with the seven components and the court grid that only it fed.
+
+`prisma/seed-history.ts` generates thirty weeks of completed bookings, games and lessons, weighted the way a
+padel club actually fills: evenings busy, weekends busiest, mornings quiet, with a gentle growth trend and a
+realistic trickle of cancellations. A court is treated as a single resource, so nothing overlaps. It is
+idempotent on an `HX-` code prefix, and dates are relative to today, so a demo database stays current.
+
+### No control lies
+
+The admin Settings "Academy" card was five inputs that discarded everything typed while the page toasted
+success. It is now a real `AcademySettings` record behind the `academy.configure` permission, holding the
+academy name, tagline, support email and phone, default timezone, currency and the cancellation policy
+players agree to before they book. The page's single Save sends only the sections that actually changed.
+
+The admin search box now searches: a confirmation code routes to Bookings, anything else to Members. The
+notification bell was a permanently lit red dot that opened nothing; it links to the centre and lights only
+when something is unread, with a separate moderation badge when reports are waiting. Every footer link was
+`href="#"`; all twelve now resolve. The dead "Invite to match" button opens a new game with that player
+already in the picker, and a pair's "Find a match" preselects that pair.
+
+### Nothing shows a developer its internals
+
+A global Zod error map in `src/lib/validation/schemas.ts` replaces "String must contain at least 2
+character(s)" and "Invalid cuid" with plain sentences, for every rule that does not carry its own message.
+
+`LABELS` and `label()` in `src/lib/catalog.ts` turn every stored enum into words, so no screen shows "both
+side", "IN_PROGRESS" or a raw participant status; `auditLabel()` does the same for audit keys in history
+timelines. `src/lib/text.ts` holds `count()`, `pluralize()` and `humanize()`, so the product never says "1
+courts". `src/lib/time.ts` gained `shortDate()`, `longDate()` and `plainDate()` on one locale constant, so a
+confirmation dialog reads "Saturday 11 October" rather than 2026-10-11.
+
+Terminology is consistent: game not session, organizer not organiser, enrollment not enrolment, "your clubs"
+not "your scope". Roadmap notes and engineering voice are gone from buyer-visible panels. Every route sets a
+browser tab title.

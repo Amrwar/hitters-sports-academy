@@ -354,7 +354,7 @@ export default function DesignSystemPage() {
             <Button variant="secondary" onClick={() => toast({ tone: "success", title: "Join request sent" })}>
               Success toast
             </Button>
-            <Button variant="secondary" onClick={() => toast({ tone: "danger", title: "Could not save", description: "Check your connection." })}>
+            <Button variant="secondary" onClick={() => toast({ tone: "danger", title: "Nothing was saved", description: "Check your connection." })}>
               Danger toast
             </Button>
             <Button onClick={() => setModal(true)}>Open modal</Button>

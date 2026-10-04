@@ -5,7 +5,7 @@
  * The numbers are deliberately plain: bookings, the money attached to them, how full the courts were, how
  * often matchmaking filled a lineup, and how full the academy is. Nothing is estimated or extrapolated.
  */
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { accessibleLocationIds, requirePermission, type Actor } from "@/lib/auth/authorize";
 
@@ -70,11 +70,24 @@ export async function getAnalytics(actor: Actor | null, opts: { weeks?: number; 
     db.booking.aggregate({ where: { ...counted, startsAt: { gte: windowStart, lte: now } }, _sum: { priceCents: true }, _count: { _all: true } }),
     db.booking.aggregate({ where: { ...counted, startsAt: { gte: previousStart, lt: windowStart } }, _sum: { priceCents: true }, _count: { _all: true } }),
     db.booking.count({ where: { ...locWhere, status: "CANCELLED", startsAt: { gte: windowStart, lte: now } } }),
-    db.booking.findMany({
-      where: { ...counted, startsAt: { gte: windowStart, lte: now } },
-      select: { startsAt: true, priceCents: true, durationMinutes: true, locationId: true },
-      take: 20_000,
-    }),
+    // Aggregated in SQL: a busy academy has tens of thousands of rows and none of them need to be loaded
+    // to draw a bar chart. The hour is converted to each club's own local time, so an evening peak in Cairo
+    // does not appear two hours early just because the instant is stored in UTC.
+    db.$queryRaw<{ week: Date; hour: number; locationId: string; bookings: bigint; revenue: bigint; minutes: bigint }[]>`
+      SELECT date_trunc('week', b."startsAt") AS week,
+             EXTRACT(HOUR FROM b."startsAt" AT TIME ZONE 'UTC' AT TIME ZONE l."timezone")::int AS hour,
+             b."locationId" AS "locationId",
+             COUNT(*)::bigint AS bookings,
+             SUM(b."priceCents")::bigint AS revenue,
+             SUM(b."durationMinutes")::bigint AS minutes
+      FROM "Booking" b
+      JOIN "Location" l ON l.id = b."locationId"
+      WHERE b.status IN ('CONFIRMED', 'COMPLETED')
+        AND b."startsAt" >= ${windowStart}
+        AND b."startsAt" <= ${now}
+        ${scope === "all" ? Prisma.empty : Prisma.sql`AND b."locationId" IN (${Prisma.join(locationIds.length ? locationIds : [""])})`}
+      GROUP BY 1, 2, 3
+    `,
     db.user.count({ where: { createdAt: { gte: windowStart }, status: "ACTIVE" } }),
     db.user.count({ where: { createdAt: { gte: previousStart, lt: windowStart }, status: "ACTIVE" } }),
     db.user.count({ where: { status: "ACTIVE" } }),
@@ -102,7 +115,7 @@ export async function getAnalytics(actor: Actor | null, opts: { weeks?: number; 
     db.playerProfile.groupBy({ by: ["level"], _count: { _all: true } }),
   ]);
 
-  // Weekly series, built from the booking rows so the chart and the totals can never disagree.
+  // Weekly series, built from the same aggregate as the totals so the chart and the headline agree.
   const buckets = Array.from({ length: weeks }, (_, i) => new Date(windowStart.getTime() + i * WEEK_MS));
   const revenueByWeek: Point[] = buckets.map((b) => ({ label: weekLabel(b), value: 0 }));
   const bookingsByWeek: Point[] = buckets.map((b) => ({ label: weekLabel(b), value: 0 }));
@@ -111,15 +124,16 @@ export async function getAnalytics(actor: Actor | null, opts: { weeks?: number; 
   let bookedMinutes = 0;
 
   for (const b of bookings) {
-    const idx = Math.min(weeks - 1, Math.max(0, Math.floor((b.startsAt.getTime() - windowStart.getTime()) / WEEK_MS)));
-    revenueByWeek[idx].value += b.priceCents;
-    bookingsByWeek[idx].value += 1;
-    byHourMap.set(b.startsAt.getUTCHours(), (byHourMap.get(b.startsAt.getUTCHours()) ?? 0) + 1);
-    bookedMinutes += b.durationMinutes;
+    const n = Number(b.bookings);
+    const idx = Math.min(weeks - 1, Math.max(0, Math.floor((b.week.getTime() - windowStart.getTime()) / WEEK_MS)));
+    revenueByWeek[idx].value += Number(b.revenue);
+    bookingsByWeek[idx].value += n;
+    byHourMap.set(b.hour, (byHourMap.get(b.hour) ?? 0) + n);
+    bookedMinutes += Number(b.minutes);
     const row = perLocation.get(b.locationId) ?? { bookings: 0, revenueCents: 0, minutes: 0 };
-    row.bookings += 1;
-    row.revenueCents += b.priceCents;
-    row.minutes += b.durationMinutes;
+    row.bookings += n;
+    row.revenueCents += Number(b.revenue);
+    row.minutes += Number(b.minutes);
     perLocation.set(b.locationId, row);
   }
 
@@ -128,12 +142,8 @@ export async function getAnalytics(actor: Actor | null, opts: { weeks?: number; 
   const sellableMinutes = courtsTotal * SELLABLE_HOURS_PER_DAY * 60 * daysElapsed;
   const occupancy = sellableMinutes ? Math.round((bookedMinutes / sellableMinutes) * 100) : 0;
 
-  const priorBookings = await db.booking.findMany({
-    where: { ...counted, startsAt: { gte: previousStart, lt: windowStart } },
-    select: { durationMinutes: true },
-    take: 20_000,
-  });
-  const priorMinutes = priorBookings.reduce((n, b) => n + b.durationMinutes, 0);
+  const priorMinutesAgg = await db.booking.aggregate({ where: { ...counted, startsAt: { gte: previousStart, lt: windowStart } }, _sum: { durationMinutes: true } });
+  const priorMinutes = priorMinutesAgg._sum.durationMinutes ?? 0;
   const priorOccupancy = sellableMinutes ? Math.round((priorMinutes / sellableMinutes) * 100) : 0;
 
   const filled = games.filter((g) => g.participants.length >= g.maxPlayers).length;

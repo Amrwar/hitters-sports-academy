@@ -39,7 +39,7 @@ export function DashboardView({ today, stats, locations }: Props) {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile size="lg" label="Bookings today" value={stats.bookingsToday} icon={<CalendarDays />} />
         <StatTile size="lg" label="Occupancy today" value={`${stats.occupancy}%`} icon={<Percent />} delta={{ value: "of available hours" }} />
-        <StatTile size="lg" label="Court revenue this month" value={money(stats.revenueMtdCents)} icon={<Wallet />} tone="brand" delta={{ value: count(stats.bookingsMtd, "booking") }} />
+        <StatTile size="lg" label="Revenue this month" value={money(stats.revenueMtdCents)} icon={<Wallet />} tone="brand" delta={{ value: count(stats.bookingsMtd, "booking") }} />
         <StatTile size="lg" label="Active members" value={stats.members.toLocaleString("en")} icon={<Users />} delta={stats.unverified ? { value: `${stats.unverified} unverified`, positive: false } : undefined} />
       </div>
 
@@ -57,8 +57,11 @@ export function DashboardView({ today, stats, locations }: Props) {
               const v = byHour.get(h) ?? 0;
               return (
                 <div key={h} className="group flex h-full flex-1 flex-col items-center gap-1.5" title={`${String(h).padStart(2, "0")}:00 · ${count(v, "booking")}`}>
-                  <div className="relative w-full flex-1 overflow-hidden rounded-t-xs bg-brand/10">
-                    <div className={`absolute inset-x-0 bottom-0 rounded-t-xs transition-all ${v === maxHour && v > 0 ? "bg-brand-gradient shadow-glow-sm" : "bg-brand/60"}`} style={{ height: `${(v / maxHour) * 100}%` }} />
+                  <div className="relative w-full flex-1 border-b border-line/15">
+                    <div
+                      className={`absolute inset-x-0 bottom-0 rounded-t-xs transition-all ${v === 0 ? "bg-line/10" : v === maxHour ? "bg-brand-gradient shadow-glow-sm" : "bg-brand/70"}`}
+                      style={{ height: v === 0 ? "2px" : `${Math.max(6, (v / maxHour) * 100)}%` }}
+                    />
                   </div>
                   <span className="text-[10px] font-semibold tabular text-fg-subtle">{String(h).padStart(2, "0")}</span>
                 </div>
@@ -125,7 +128,7 @@ export function DashboardView({ today, stats, locations }: Props) {
                       {b.location.name.replace("HITTERS ", "")} · {b.court.name}
                     </TD>
                     <TD className="whitespace-nowrap tabular">
-                      {formatInZone(new Date(b.startsAt), b.location.timezone, { hour: "2-digit", minute: "2-digit" })} · {b.durationMinutes}m
+                      {formatInZone(new Date(b.startsAt), b.location.timezone, { hour: "2-digit", minute: "2-digit" })} · {b.durationMinutes} min
                     </TD>
                     <TD>
                       <BookingStatusBadge status={b.status} />

@@ -173,7 +173,7 @@ export const LABELS: Record<string, Record<string, string>> = {
   sideShort: { LEFT: "Left", RIGHT: "Right", BOTH: "Both sides" },
   participantRole: { ORGANIZER: "Organizer", PLAYER: "Player" },
   participantStatus: { INVITED: "Invited", ACCEPTED: "Joined", DECLINED: "Declined", LEFT: "Left", REMOVED: "Removed" },
-  bookingSource: { PLAYER_APP: "Booked in the app", ADMIN: "Booked by staff", WALK_IN: "Walk-in", IMPORT: "Imported" },
+  bookingSource: { PLAYER_APP: "Booked in the app", ADMIN: "Booked by staff", RECEPTION: "Booked at reception" },
   bookingStatus: { PENDING: "Pending", CONFIRMED: "Confirmed", CANCELLED: "Cancelled", COMPLETED: "Completed", NO_SHOW: "No-show" },
   lessonStatus: { REQUESTED: "Awaiting the coach", CONFIRMED: "Confirmed", CANCELLED: "Cancelled", COMPLETED: "Completed", NO_SHOW: "No-show" },
   enrollmentStatus: { ENROLLED: "Enrolled", WAITLISTED: "Waitlisted", CANCELLED: "Cancelled", COMPLETED: "Completed" },

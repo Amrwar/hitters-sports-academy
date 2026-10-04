@@ -10,6 +10,8 @@ import { hashPassword } from "../src/lib/auth/password";
 import { seedRolePermissions } from "../src/server/services/permissions-seed";
 import { DEFAULT_LEVELS } from "../src/server/services/levels";
 import { notify, seedNotificationTemplates } from "../src/server/services/notifications";
+import { plainDate } from "../src/lib/time";
+import { seedHistory } from "./seed-history";
 
 const db = new PrismaClient();
 /** Shared password for every seeded account. Override with SEED_PASSWORD when seeding anything reachable from the internet. */
@@ -338,11 +340,15 @@ async function main() {
   };
   const nc = LOCATIONS.find((l) => l.slug === "new-cairo")!.name;
   const whenAmr = bAmr.startsAt.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-  await ensureNotification(amrId, "package.purchased", { type: "package.purchased", url: "/app/packages", data: { package: "5 lessons", credits: 5, creditsPlural: "s", expires: new Date(Date.now() + 80 * 86_400_000).toISOString().slice(0, 10) } });
+  await ensureNotification(amrId, "package.purchased", { type: "package.purchased", url: "/app/packages", data: { package: "5 lessons", credits: 5, creditsPlural: "s", expires: plainDate(new Date(Date.now() + 80 * 86_400_000)) } });
   await ensureNotification(amrId, "academy.announcement", { type: "academy.announcement", url: "/app/notifications", dedupeKey: null, data: { title: "New Cairo courts resurfaced", body: "Courts 1 to 4 have fresh turf from Monday. Expect a slightly faster bounce." } });
   await ensureNotification(amrId, "booking.reminder", { type: "booking.reminder", url: `/app/bookings/${bAmr.id}`, dedupeKey: `booking.reminder:${bAmr.id}`, data: { code: "HT-SEED02", club: nc, court: "Court 3", when: whenAmr } });
   await ensureNotification(amrId, "match.suggested", { type: "match.suggested", url: "/app/play/GM-SEED03", groupKey: "GM-SEED03", data: { when: "Thu 18:00", club: LOCATIONS.find((l) => l.slug === "sheikh-zayed")!.name, reasons: "Exact level match · Inside your preferred times", code: "GM-SEED03" } });
   console.log("notifications: done");
+
+  // Twelve weeks of completed bookings, so the dashboard and analytics have a real business to report on.
+  const history = await seedHistory(db);
+  console.log(history.skipped ? "history: already present" : `history: ${history.created} past bookings`);
 
   console.log(`\nSeed complete. Sign in with any seeded email and the development password defined in prisma/seed.ts.`);
 }

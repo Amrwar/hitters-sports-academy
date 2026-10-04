@@ -60,7 +60,7 @@ export function GamesAdmin({ locations, selectedId, status, scope, items, total,
       toast({ tone: "success", title: `Game ${cancel.code} cancelled` });
       setCancel(null);
       router.refresh();
-    } else toast({ tone: "danger", title: "Could not cancel", description: res.message });
+    } else toast({ tone: "danger", title: "Nothing was cancelled", description: res.message });
   }
 
   return (

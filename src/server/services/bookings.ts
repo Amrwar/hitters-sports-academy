@@ -245,7 +245,7 @@ export async function createBooking(actor: Actor | null, input: unknown, opts: {
       await notify(booking.playerId, {
         type: "booking.confirmed",
         url: `/app/bookings/${booking.id}`,
-        data: { code: booking.confirmationCode, club: slot.location.name, court: slot.court.name, when: `${z.dateISO} ${String(Math.floor(z.minutes / 60)).padStart(2, "0")}:${String(z.minutes % 60).padStart(2, "0")}`, duration: req.durationMinutes, bookingId: booking.id },
+        data: { code: booking.confirmationCode, club: slot.location.name, court: slot.court.name, when: formatInZone(booking.startsAt, slot.location.timezone), duration: req.durationMinutes, bookingId: booking.id },
       });
     }
     return booking;

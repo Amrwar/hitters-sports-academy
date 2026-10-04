@@ -34,7 +34,7 @@ export function PackagesView({ purchases, catalog }: { purchases: PurchaseView[]
       toast({ tone: "success", title: `${buy.name} added`, description: "Pay at the venue; credits are ready to use when booking." });
       setBuy(null);
       router.refresh();
-    } else toast({ tone: "danger", title: "Could not buy", description: res.message });
+    } else toast({ tone: "danger", title: "The package was not bought", description: res.message });
   }
 
   return (

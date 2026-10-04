@@ -45,7 +45,7 @@ export function ProgramDetail({ program: p, enrollment, levels, myLevel }: { pro
       setConfirm(false);
       setWithdraw(false);
       router.refresh();
-    } else toast({ tone: "danger", title: res.code === "NOT_ELIGIBLE" ? "Not eligible" : res.code === "PROGRAM_FULL" ? "Program full" : "Could not do that", description: res.message });
+    } else toast({ tone: "danger", title: res.code === "NOT_ELIGIBLE" ? "This program is not a fit for you" : res.code === "PROGRAM_FULL" ? "Program full" : "That did not go through", description: res.message });
   }
 
   return (

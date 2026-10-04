@@ -228,7 +228,7 @@ function RescheduleModal({ open, onClose, lesson }: { open: boolean; onClose: ()
         </div>
         {pending && !day ? (
           <div className="flex items-center gap-2 text-body-sm text-fg-muted">
-            <Spinner size={16} /> Loading times
+            <Spinner size={16} /> Loading times…
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">

@@ -32,10 +32,11 @@ function Bars({ points, format, highlightLast }: { points: { label: string; valu
       {points.map((p, i) => (
         <div key={p.label} className="flex h-full flex-1 flex-col items-center gap-2" title={`${p.label}: ${format(p.value)}`}>
           <span className="text-caption font-semibold tabular text-fg-muted">{p.value ? format(p.value) : ""}</span>
-          <div className="flex w-full flex-1 items-end overflow-hidden rounded-t-xs bg-brand/10">
+          {/* No track behind the bar: an empty week has to look empty, not like a full one in a lighter colour. */}
+          <div className="flex w-full flex-1 items-end border-b border-line/15">
             <div
-              className={cn("w-full rounded-t-xs transition-all", highlightLast && i === points.length - 1 ? "bg-brand-gradient shadow-glow-sm" : "bg-brand/60")}
-              style={{ height: `${Math.max(2, (p.value / max) * 100)}%` }}
+              className={cn("w-full rounded-t-xs transition-all", p.value === 0 ? "bg-line/10" : highlightLast && i === points.length - 1 ? "bg-brand-gradient shadow-glow-sm" : "bg-brand/70")}
+              style={{ height: p.value === 0 ? "2px" : `${Math.max(4, (p.value / max) * 100)}%` }}
             />
           </div>
           <span className="text-caption font-semibold text-fg-subtle">{p.label}</span>

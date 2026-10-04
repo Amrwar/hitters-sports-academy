@@ -52,7 +52,7 @@ export function PlayView({ viewerId, viewerLevel, levelLabels, initialTab, mine,
     const res = await fn();
     setBusy(null);
     if (res.ok) toast({ tone: "success", title: label });
-    else toast({ tone: "danger", title: res.code === "SESSION_FULL" ? "No room left" : "Could not do that", description: res.message });
+    else toast({ tone: "danger", title: res.code === "SESSION_FULL" ? "No room left" : "That did not go through", description: res.message });
     router.refresh();
     return res.ok;
   }

@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { ArrowRight, CalendarCheck, ClipboardCheck, GraduationCap, LayoutDashboard, MapPin, Search, ShieldCheck, Star, Swords, Users, Zap } from "lucide-react";
+import { ArrowRight, CalendarCheck, ClipboardCheck, GraduationCap, LayoutDashboard, LayoutGrid, MapPin, Search, ShieldCheck, Swords, Users, Zap } from "lucide-react";
 import { Lockup, Monogram } from "@/components/brand/Logo";
 import { MarketingFooter, MarketingNav } from "@/components/nav/marketing-nav";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,7 @@ export default async function LandingPage() {
         <div className="absolute inset-x-0 bottom-0 h-64 bg-[linear-gradient(180deg,rgba(3,7,18,0)_0%,#030712_100%)]" />
         <div className="relative mx-auto flex min-h-[92dvh] max-w-6xl flex-col items-center justify-center px-4 pb-16 pt-28 text-center sm:px-6 lg:items-start lg:text-left">
           <Badge tone="brand" dot pulse className="mb-6 bg-white/10 text-blue-100 ring-white/15">
-            {clubs.length > 0 ? `Now open · ${count(clubs.length, "location")} across Egypt` : "Now open across Egypt"}
+            {clubs.length > 0 ? `Now open · ${count(clubs.length, "club")} across Egypt` : "Now open across Egypt"}
           </Badge>
           <Lockup height={44} glow className="sm:hidden" />
           <Lockup height={72} glow className="hidden sm:inline-flex" />
@@ -62,7 +62,7 @@ export default async function LandingPage() {
             {[
               { v: String(totalCourts || "23"), l: totalCourts === 1 ? "Court" : "Courts" },
               { v: String(clubs.length || 4), l: clubs.length === 1 ? "Club" : "Clubs" },
-              { v: fromPrice ? money(fromPrice) : "EGP 400", l: "From, per hour" },
+              { v: fromPrice ? money(fromPrice) : "EGP 400", l: "From, an hour" },
             ].map((s) => (
               <div key={s.l} className="rounded-lg border border-white/10 bg-white/5 p-3 backdrop-blur-xl sm:p-4">
                 <div className="text-h2 tabular sm:text-h1">{s.v}</div>
@@ -96,8 +96,8 @@ export default async function LandingPage() {
                 </div>
               </CourtBackdrop>
               <div className="flex items-center justify-between px-4 py-3 text-body-sm text-blue-100/70">
-                <span className="flex items-center gap-1">
-                  <Star size={14} className="fill-volt text-volt" /> <span className="font-bold text-white">{l.status === "COMING_SOON" ? "Opening soon" : count(l.activeCourts, "court")}</span>
+                <span className="flex items-center gap-1.5">
+                  <LayoutGrid size={14} className="text-blue-300" /> <span className="font-bold text-white">{l.status === "COMING_SOON" ? "Opening soon" : count(l.activeCourts, "court")}</span>
                 </span>
                 {l.priceFromCents != null && (
                   <span>
@@ -275,7 +275,7 @@ export default async function LandingPage() {
               <Button size="xl" variant="secondary" className="border-transparent bg-white text-blue-700 hover:bg-blue-50" href="/register" rightIcon={<ArrowRight />}>
                 Create your account
               </Button>
-              <span className="text-caption text-white/70">Free to join · {money(120000)}/month for membership</span>
+              <span className="text-caption text-white/70">Free to join · membership from {money(120000)} a month</span>
             </div>
           </div>
         </div>

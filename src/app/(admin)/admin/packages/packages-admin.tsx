@@ -37,7 +37,7 @@ export function PackagesAdmin({ catalog, purchases, trainers, locations, members
     const res = await fn();
     setBusy(null);
     if (res.ok) toast({ tone: "success", title: label });
-    else toast({ tone: "danger", title: "Could not do that", description: res.message });
+    else toast({ tone: "danger", title: "That did not go through", description: res.message });
     router.refresh();
     return res.ok;
   }
@@ -115,7 +115,7 @@ export function PackagesAdmin({ catalog, purchases, trainers, locations, members
       <Card>
         <CardHeader title="Catalog" description="Prepaid lesson bundles. Credits are deducted when a lesson is booked and returned when it is cancelled in time." />
         {catalog.length === 0 ? (
-          <EmptyState compact icon={<Package />} title="No packages yet" />
+          <EmptyState compact icon={<Package />} title="No packages yet" description="Create one above to let members buy lessons in advance." />
         ) : (
           <TableWrap>
             <Table>

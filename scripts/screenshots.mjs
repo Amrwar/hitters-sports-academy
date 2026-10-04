@@ -30,6 +30,8 @@ async function shot(page, name, caption, opts = {}) {
 
 async function go(page, url) {
   await page.goto(`${BASE}${url}`, { waitUntil: "networkidle2", timeout: 90_000 });
+  // The dev-server badge floats over the bottom-left corner and would end up in every proposal image.
+  await page.addStyleTag({ content: "nextjs-portal,#__next-build-watcher,[data-nextjs-toast]{display:none !important}" }).catch(() => undefined);
   await sleep(400);
 }
 
@@ -194,6 +196,8 @@ try {
   await login(page, "admin@hitters.academy");
   await go(page, "/admin");
   await shot(page, "admin-dashboard", "Admin dashboard: today's bookings, occupancy by hour, revenue, members.", { fullPage: true, viewport: "desktop" });
+  await go(page, "/admin/analytics");
+  await shot(page, "admin-analytics", "Analytics over a chosen window: revenue and bookings by week with the change on the previous period, busiest hours, the level mix of the membership, matchmaking fill rate, academy occupancy and a per-club table. Every figure is read from the live tables.", { fullPage: true, viewport: "desktop" });
   await go(page, "/admin/bookings?all=1");
   await shot(page, "admin-bookings", "Bookings: filters, status, payment, row actions, manual booking.", { viewport: "desktop" });
   await go(page, "/admin/calendar");

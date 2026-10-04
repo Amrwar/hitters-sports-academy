@@ -240,6 +240,12 @@
     "viewport": "desktop"
   },
   {
+    "name": "admin-analytics",
+    "caption": "Analytics over a chosen window: revenue and bookings by week with the change on the previous period, busiest hours, the level mix of the membership, matchmaking fill rate, academy occupancy and a per-club table. Every figure is read from the live tables.",
+    "file": "docs/screenshots/admin-analytics.png",
+    "viewport": "desktop"
+  },
+  {
     "name": "admin-bookings",
     "caption": "Bookings: filters, status, payment, row actions, manual booking.",
     "file": "docs/screenshots/admin-bookings.png",

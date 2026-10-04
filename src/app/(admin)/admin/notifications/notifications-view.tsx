@@ -234,7 +234,7 @@ function TemplateCard({ template }: { template: TemplateDto }) {
                 if (res.ok) {
                   toast({ tone: "success", title: "Template saved" });
                   router.refresh();
-                } else toast({ tone: "danger", title: "Could not save", description: res.message });
+                } else toast({ tone: "danger", title: "Nothing was saved", description: res.message });
               })
             }
           >
@@ -306,7 +306,7 @@ function Announcement({ locations, academyWide }: { locations: { id: string; nam
                   setTitle("");
                   setBody("");
                   toast({ tone: "success", title: `Sent to ${count(res.data.sent, "person", "people")}` });
-                } else toast({ tone: "danger", title: "Could not send", description: res.message });
+                } else toast({ tone: "danger", title: "Nothing was sent", description: res.message });
               })
             }
           >

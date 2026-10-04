@@ -174,7 +174,7 @@ export function MemberDetail({ user, profile, history, assessments, overview, le
           <div className="mt-4 space-y-3">
             {tab === "assessments" &&
               (assessments.length === 0 ? (
-                <EmptyState compact icon={<ClipboardCheck />} title="No assessments" />
+                <EmptyState compact icon={<ClipboardCheck />} title="Not assessed yet" description="Record an assessment above to give this member an official level." />
               ) : (
                 assessments.map((a) => (
                   <Card key={a.id} padding="sm">
@@ -208,10 +208,10 @@ export function MemberDetail({ user, profile, history, assessments, overview, le
                 ))
               ))}
             {tab === "bookings" &&
-              (history.bookings.length === 0 ? <EmptyState compact icon={<Swords />} title="No bookings" /> : history.bookings.map((b) => <BookingRow key={b.id} booking={b} href={`/admin/bookings/${b.id}`} />))}
+              (history.bookings.length === 0 ? <EmptyState compact icon={<Swords />} title="No bookings yet" description="Court reservations appear here as soon as this member makes one." /> : history.bookings.map((b) => <BookingRow key={b.id} booking={b} href={`/admin/bookings/${b.id}`} />))}
             {tab === "training" &&
               (history.training.length === 0 ? (
-                <EmptyState compact icon={<GraduationCap />} title="No training recorded" />
+                <EmptyState compact icon={<GraduationCap />} title="No training recorded" description="Lessons and program sessions are added here as coaches mark attendance." />
               ) : (
                 history.training.map((t) => (
                   <Card key={t.id} padding="sm">
