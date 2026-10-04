@@ -4,6 +4,8 @@ import { listManagedLocations } from "@/server/services/locations";
 import { listGamesInScope } from "@/server/services/game-sessions";
 import { GamesAdmin } from "./games-admin";
 
+export const metadata = { title: "Games" };
+
 export const dynamic = "force-dynamic";
 
 const STATUSES = ["DRAFT", "OPEN", "FULL", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED"] as const;

@@ -16,6 +16,8 @@ import { getLevelDefinitions } from "@/server/services/levels";
 import { getMyProfile } from "@/server/services/profiles";
 import { BookLessonPanel } from "./book-lesson";
 
+export const metadata = { title: "Coach" };
+
 export const dynamic = "force-dynamic";
 
 export default async function TrainerPage({ params }: { params: Promise<{ id: string }> }) {

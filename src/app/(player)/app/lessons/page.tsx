@@ -7,6 +7,8 @@ import { requireActorOrRedirect } from "@/lib/auth/cookies";
 import { listMyLessons } from "@/server/services/lessons";
 import { ScopeTabs } from "./scope-tabs";
 
+export const metadata = { title: "My lessons" };
+
 export const dynamic = "force-dynamic";
 
 export default async function MyLessonsPage({ searchParams }: { searchParams: Promise<{ scope?: string }> }) {

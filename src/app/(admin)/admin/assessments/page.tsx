@@ -6,6 +6,8 @@ import { getLevelDefinitions } from "@/server/services/levels";
 import { listManagedLocations } from "@/server/services/locations";
 import { AssessmentsAdmin } from "./assessments-admin";
 
+export const metadata = { title: "Assessments" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminAssessmentsPage({ searchParams }: { searchParams: Promise<{ tab?: string; location?: string }> }) {

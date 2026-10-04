@@ -20,6 +20,7 @@ import { useToast } from "@/components/ui/toast";
 import { formatInZone, utcToLocalInput } from "@/lib/time";
 import type { AssessmentRequestView } from "@/server/services/assessments";
 import { cancelAssessmentRequestAction, createAssessmentAction, scheduleAssessmentAction, updateLevelDefinitionsAction } from "@/server/actions/assessments";
+import { count } from "@/lib/text";
 
 type Recent = { id: string; kind: string; level: "A" | "B" | "C" | "D"; previousLevel: "A" | "B" | "C" | "D" | null; assessedAt: Date; location: { name: string }; assessor: { name: string }; playerProfile: { id: string; user: { id: string; name: string } } };
 type Props = {
@@ -119,7 +120,7 @@ export function AssessmentsAdmin({ locations, selectedId, open, completed, recen
                 <CardHeader title={status === "REQUESTED" ? "Waiting to be scheduled" : "Scheduled"} description={status === "REQUESTED" ? "Players asked for an assessment" : "Record the result after the session"} className="px-5 pt-5" />
                 {rows.length === 0 ? (
                   <div className="px-5 pb-5">
-                    <EmptyState compact icon={status === "REQUESTED" ? <ListChecks /> : <CalendarClock />} title={status === "REQUESTED" ? "No new requests" : "Nothing scheduled"} />
+                    <EmptyState compact icon={status === "REQUESTED" ? <ListChecks /> : <CalendarClock />} title={status === "REQUESTED" ? "No new requests" : "Nothing scheduled"} description={status === "REQUESTED" ? "Players ask for an assessment from their profile; new requests land here." : "Schedule a request above and it appears here with its time and assessor."} />
                   </div>
                 ) : (
                   <ul className="divide-y divide-line/10 border-t border-line/10">
@@ -138,7 +139,7 @@ export function AssessmentsAdmin({ locations, selectedId, open, completed, recen
                               </Badge>
                               {r.playerProfile.level && <LevelBadge level={r.playerProfile.level} size="sm" />}
                               {r.playerProfile.selfLevel && (
-                                <Badge size="sm">self-reported {r.playerProfile.selfLevel}</Badge>
+                                <Badge size="sm">Self-reported {r.playerProfile.selfLevel}</Badge>
                               )}
                             </div>
                             <div className="text-caption text-fg-muted">
@@ -179,7 +180,7 @@ export function AssessmentsAdmin({ locations, selectedId, open, completed, recen
       {tab === "history" && (
         <div className="mt-5">
           {recent.length === 0 ? (
-            <EmptyState icon={<ClipboardCheck />} title="No assessments recorded yet" />
+            <EmptyState icon={<ClipboardCheck />} title="No assessments recorded yet" description="Record one from a scheduled request, or from a member’s page." />
           ) : (
             <TableWrap>
               <Table>
@@ -222,7 +223,7 @@ export function AssessmentsAdmin({ locations, selectedId, open, completed, recen
               </Table>
             </TableWrap>
           )}
-          {completed.length > 0 && <p className="mt-3 text-caption text-fg-subtle">{completed.length} completed request{completed.length === 1 ? "" : "s"} in scope.</p>}
+          {completed.length > 0 && <p className="mt-3 text-caption text-fg-subtle">{count(completed.length, "completed request")} at your clubs.</p>}
         </div>
       )}
 

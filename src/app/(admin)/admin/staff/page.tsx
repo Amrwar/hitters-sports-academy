@@ -5,6 +5,8 @@ import { listManagedLocations } from "@/server/services/locations";
 import { listUsers } from "@/server/services/users";
 import { StaffAdmin } from "./staff-admin";
 
+export const metadata = { title: "Staff" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminStaffPage() {

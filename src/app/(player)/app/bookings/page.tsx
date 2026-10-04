@@ -7,6 +7,8 @@ import { listMyBookings } from "@/server/services/bookings";
 import { BookingRow } from "@/components/patterns/booking-row";
 import { ScopeTabs } from "./scope-tabs";
 
+export const metadata = { title: "My bookings" };
+
 export const dynamic = "force-dynamic";
 
 export default async function MyBookingsPage({ searchParams }: { searchParams: Promise<{ scope?: string }> }) {

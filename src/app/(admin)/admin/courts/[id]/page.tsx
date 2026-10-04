@@ -5,6 +5,8 @@ import { isAppError } from "@/lib/errors";
 import { getCourt } from "@/server/services/courts";
 import { CourtAdmin } from "./court-admin";
 
+export const metadata = { title: "Court" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminCourtPage({ params }: { params: Promise<{ id: string }> }) {

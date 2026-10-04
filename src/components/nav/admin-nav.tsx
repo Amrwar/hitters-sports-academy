@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import {
   BarChart3,
@@ -151,6 +151,30 @@ function SidebarChrome({ onClose }: { onClose?: () => void }) {
 }
 
 /** Desktop-first admin shell: fixed dark sidebar, light content area, drawer on small screens. */
+/**
+ * Admin search. A confirmation code goes to bookings, anything else to members, because those are the two
+ * lists with a server-side query. It navigates rather than pretending to search in place.
+ */
+function AdminSearch() {
+  const router = useRouter();
+  const [q, setQ] = useState("");
+  return (
+    <form
+      className="hidden w-72 md:block"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const term = q.trim();
+        if (!term) return;
+        const isCode = /^[A-Za-z]{2}-[A-Za-z0-9]{4,}$/.test(term);
+        router.push(`${isCode ? "/admin/bookings" : "/admin/members"}?q=${encodeURIComponent(term)}`);
+      }}
+      role="search"
+    >
+      <Input size="sm" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search members or a booking code" leading={<Search />} aria-label="Search members or a booking code" />
+    </form>
+  );
+}
+
 export function AdminShell({ children, title, breadcrumb, actions }: { children: ReactNode; title: string; breadcrumb?: string[]; actions?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const me = useAdminActor();
@@ -186,12 +210,16 @@ export function AdminShell({ children, title, breadcrumb, actions }: { children:
               )}
               <h1 className="truncate text-h4 sm:text-h3">{title}</h1>
             </div>
-            <div className="hidden w-72 md:block">
-              <Input size="sm" placeholder="Search bookings, members…" leading={<Search />} aria-label="Search" />
-            </div>
-            <IconButton variant="ghost" size="sm" label="Notifications" className="relative">
+            <AdminSearch />
+            {me.openReports > 0 && (
+              <IconButton variant="ghost" size="sm" label={`Moderation: ${me.openReports} reported message${me.openReports === 1 ? "" : "s"} waiting`} href="/admin/moderation" className="relative">
+                <ShieldAlert />
+                <span className="absolute right-2 top-2 size-2 rounded-full bg-danger ring-2 ring-surface-1" />
+              </IconButton>
+            )}
+            <IconButton variant="ghost" size="sm" label={me.unread > 0 ? `Notifications: ${me.unread} unread` : "Notifications"} href="/app/notifications" className="relative">
               <Bell />
-              <span className="absolute right-2 top-2 size-2 rounded-full bg-danger ring-2 ring-surface-1" />
+              {me.unread > 0 && <span className="absolute right-2 top-2 size-2 rounded-full bg-danger ring-2 ring-surface-1" />}
             </IconButton>
             <Dropdown
               trigger={

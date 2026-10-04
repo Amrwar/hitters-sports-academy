@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { deliveryStats, listTemplates } from "@/server/services/notifications";
 import { NotificationsView, type DeliveryStat, type TemplateDto } from "./notifications-view";
 
+export const metadata = { title: "Notifications" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminNotificationsPage() {

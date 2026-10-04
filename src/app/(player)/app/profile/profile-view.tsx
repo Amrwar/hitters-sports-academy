@@ -25,6 +25,7 @@ import type { AssessmentOverview, PlayerAssessmentView } from "@/server/services
 import { updateProfileAction } from "@/server/actions/profile";
 import { changePasswordAction, logoutAction } from "@/server/actions/auth";
 import { cancelAssessmentRequestAction, requestAssessmentAction } from "@/server/actions/assessments";
+import { label } from "@/lib/catalog";
 
 type Tab = "overview" | "assessment" | "history" | "settings";
 type Props = {
@@ -67,7 +68,7 @@ export function ProfileView({ profile, overview, history, assessments, levels, l
               )}
             </div>
             <div className="mt-1 text-caption text-fg-muted">
-              {profile.side.charAt(0) + profile.side.slice(1).toLowerCase()} side · {profile.homeLocation?.name.replace("HITTERS ", "") ?? "No home club"} · since {memberSince}
+              {label("side", profile.side)} · {profile.homeLocation?.name.replace("HITTERS ", "") ?? "No home club"} · since {memberSince}
             </div>
           </div>
         </div>
@@ -138,7 +139,7 @@ function Overview({ profile, overview, history, levelMap, onGoAssess }: { profil
             <li className="flex items-center gap-3 py-2.5">
               <User size={16} className="text-blue-300" /> <span className="text-fg-muted">Side · style</span>
               <span className="ml-auto text-right font-semibold">
-                {profile.side.charAt(0) + profile.side.slice(1).toLowerCase()}
+                {label("sideShort", profile.side)}
                 {profile.playStyle ? ` · ${profile.playStyle}` : ""}
               </span>
             </li>
@@ -350,10 +351,10 @@ function HistoryTab({ history }: { history: PlayerHistory }) {
                 </div>
               </Card>
             ))}
-            <p className="text-center text-caption text-fg-subtle">Scores and results arrive with matchmaking.</p>
+            <p className="text-center text-caption text-fg-subtle">Scores and results appear here once a game is played.</p>
           </div>
         ) : (
-          <EmptyState compact icon={<Swords />} title="No matches yet" description="Completed sessions you took part in appear here." />
+          <EmptyState compact icon={<Swords />} title="No matches yet" description="Completed games and training you took part in appear here." />
         ))}
       {sub === "training" &&
         (history.training.length ? (
@@ -376,7 +377,7 @@ function HistoryTab({ history }: { history: PlayerHistory }) {
             ))}
           </div>
         ) : (
-          <EmptyState compact icon={<Trophy />} title="No training recorded" description="Sessions with HITTERS trainers are added by the coach." />
+          <EmptyState compact icon={<Trophy />} title="No training recorded" description="Lessons are added to your history by your coach." />
         ))}
     </div>
   );
@@ -436,7 +437,7 @@ function SettingsForm({ profile, locations, levels }: { profile: Profile; locati
       <form onSubmit={save}>
         <Card padding="md" className="space-y-4">
           <div className="text-h4">Profile</div>
-          <Field label="Photo URL" hint="Paste an https image link. Uploads arrive with the storage provider." error={fields.photoUrl}>{(id) => <Input id={id} name="photoUrl" type="url" defaultValue={profile.photoUrl ?? ""} placeholder="https://…" invalid={!!fields.photoUrl} />}</Field>
+          <Field label="Photo URL" hint="Paste a link to a photo. Uploading from your phone is coming soon." error={fields.photoUrl}>{(id) => <Input id={id} name="photoUrl" type="url" defaultValue={profile.photoUrl ?? ""} placeholder="https://…" invalid={!!fields.photoUrl} />}</Field>
           <Field label="Name" error={fields.name}>{(id) => <Input id={id} name="name" defaultValue={profile.user.name} invalid={!!fields.name} />}</Field>
           <Field label="Phone" error={fields.phone}>{(id) => <Input id={id} name="phone" type="tel" defaultValue={profile.user.phone ?? ""} placeholder="01x xxxx xxxx" invalid={!!fields.phone} />}</Field>
           <Field label="Bio" error={fields.bio}>{(id) => <Textarea id={id} name="bio" defaultValue={profile.bio ?? ""} maxLength={500} placeholder="Tell other players about your game." invalid={!!fields.bio} />}</Field>

@@ -55,7 +55,12 @@ async function logout(page) {
   const amr = await prisma.user.findUnique({ where: { email: "amr@example.com" }, select: { id: true } });
   if (amr) {
     const gone = await prisma.booking.deleteMany({ where: { playerId: amr.id, confirmationCode: { not: { startsWith: "HT-SEED" } }, startsAt: { gt: new Date() } } });
-    console.log(`cleanup: removed ${gone.count} script bookings`);
+    // Each run books a court and each booking leaves a notification, so the centre fills with repeats.
+    // Clear the ones earlier runs made; this run's own booking puts a fresh one back.
+    const stale = await prisma.notification.deleteMany({
+      where: { userId: amr.id, OR: [{ type: "booking.confirmed" }, { groupKey: null, type: { startsWith: "game." } }] },
+    });
+    console.log(`cleanup: removed ${gone.count} script bookings and ${stale.count} stale notifications`);
   }
   await prisma.$disconnect();
 }
@@ -120,7 +125,12 @@ try {
   await go(page, "/app/profile?tab=settings");
   await shot(page, "player-profile-settings", "Settings: photo, identity, playing preferences, preferred times and clubs, password.", { viewport: "phone", fullPage: true });
   await go(page, "/app/notifications");
-  await shot(page, "player-notifications", "In-app notifications: bookings, assessments and staff updates.", { viewport: "phone" });
+  await shot(page, "player-notifications", "Notification centre: category filters, unread first, grouped rows, mark all read.", { viewport: "phone", fullPage: true });
+  await go(page, "/app/notifications?c=MATCHMAKING");
+  await shot(page, "player-notifications-filter", "Filtered to games and matchmaking: invitations, join requests and lineup changes only.", { viewport: "phone" });
+  await go(page, "/app/notifications/preferences");
+  await shot(page, "player-notification-preferences", "Notification preferences: every category against every channel, with email, push and SMS marked as awaiting a provider.", { viewport: "phone", fullPage: true });
+
   await go(page, "/app/play");
   await shot(page, "player-play", "Play, For you: ranked matches for my level with the reasons, Find a match, my pairs.", { viewport: "phone", fullPage: true });
   await go(page, "/app/play?tab=games");
@@ -162,6 +172,20 @@ try {
   await go(page, "/app/packages");
   await shot(page, "player-packages", "Packages: credits left, expiry, catalogue, lesson history.", { viewport: "phone", fullPage: true });
   await logout(page);
+  await page.close();
+
+  /* ------------------------------------------------ Messaging, as a player who is in a lineup (phone, fresh session) */
+  const omarContext = await browser.createBrowserContext();
+  page = await omarContext.newPage();
+  await page.setViewport({ width: 430, height: 932, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await login(page, "omar@example.com");
+  await go(page, "/app/messages");
+  await shot(page, "player-messages", "Messages: one conversation per game and per program, newest activity first.", { viewport: "phone" });
+  await go(page, "/app/play/GM-SEED01");
+  await page.waitForSelector("#chat", { timeout: 30_000 }).catch(() => undefined);
+  await page.evaluate(() => document.querySelector("#chat")?.scrollIntoView({ block: "start" }));
+  await sleep(600);
+  await shot(page, "player-game-chat", "Group chat for a game: the lineup by name, photo and level, the conversation, and a report control on anyone else's message. No phone number or email is ever shown.", { viewport: "phone" });
   await page.close();
 
   /* ------------------------------------------------ Admin (desktop) */
@@ -212,6 +236,16 @@ try {
   await shot(page, "admin-programs", "Programs: schedule, enrollment progress, status, roster with waitlist, attendance and payments.", { viewport: "desktop", fullPage: true });
   await go(page, "/admin/packages");
   await shot(page, "admin-packages", "Packages: catalogue and member purchases with credits, expiry and payments.", { viewport: "desktop" });
+  await go(page, "/admin/notifications");
+  await shot(page, "admin-notification-templates", "Notification templates by category: editable title and body, live preview, the placeholders each type can fill, channels and an on/off switch.", { viewport: "desktop", fullPage: true });
+  await page.evaluate(() => [...document.querySelectorAll("[role=tab], button")].find((t) => t.textContent.trim() === "Announcement")?.click());
+  await sleep(900);
+  await shot(page, "admin-announcement", "Academy announcement: title, message, club and audience, with a preview of the notification players will see.", { viewport: "desktop" });
+  await page.evaluate(() => [...document.querySelectorAll("[role=tab], button")].find((t) => t.textContent.trim() === "Delivery")?.click());
+  await sleep(900);
+  await shot(page, "admin-notification-delivery", "Delivery health per channel: in-app sent immediately, email, push and SMS queued until a provider is registered.", { viewport: "desktop" });
+  await go(page, "/admin/moderation");
+  await shot(page, "admin-moderation", "Moderation queue: a reported message with the reason, the original text, and remove, action, dismiss or lock the conversation.", { viewport: "desktop", fullPage: true });
   await page.close();
 
   /* ------------------------------------------------------------------ Trainer workspace (desktop, fresh session) */

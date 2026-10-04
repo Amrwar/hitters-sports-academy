@@ -15,6 +15,7 @@ import { useToast } from "@/components/ui/toast";
 import { PlayerPicker, type PickedPlayer } from "@/components/patterns/player-picker";
 import type { PairView } from "@/server/services/pairs";
 import { dissolvePairAction, proposePairAction, respondToPairAction } from "@/server/actions/matchmaking";
+import { label } from "@/lib/catalog";
 
 export function PairsView({ viewerId, pairs, levelLabels }: { viewerId: string; pairs: PairView[]; levelLabels: Record<string, string> }) {
   const router = useRouter();
@@ -62,7 +63,7 @@ export function PairsView({ viewerId, pairs, levelLabels }: { viewerId: string; 
           </div>
           <div className="text-caption text-fg-muted">
             {o.name}
-            {o.playerProfile?.side ? ` · ${o.playerProfile.side.toLowerCase()} side` : ""}
+            {o.playerProfile?.side ? ` · ${label("side", o.playerProfile.side)}` : ""}
           </div>
         </div>
         {actions}

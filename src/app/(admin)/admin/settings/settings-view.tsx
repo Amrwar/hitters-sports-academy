@@ -11,28 +11,67 @@ import { Switch } from "@/components/ui/misc";
 import { Alert } from "@/components/ui/alert";
 import { useToast } from "@/components/ui/toast";
 import { updateMatchmakingConfigAction } from "@/server/actions/matchmaking";
+import { updateAcademySettingsAction } from "@/server/actions/admin";
+import type { AcademyProfile } from "@/server/services/academy-settings";
 
 type Matchmaking = { allowAdjacentLevels: boolean; requestExpiryHours: number; maxOpenRequests: number };
 
-export function SettingsView({ matchmaking, canConfigure }: { matchmaking: Matchmaking; canConfigure: boolean }) {
+const TIMEZONES = ["Africa/Cairo", "Europe/Madrid", "Europe/London", "Asia/Dubai", "Asia/Riyadh"];
+
+export function SettingsView({
+  matchmaking,
+  academy,
+  canConfigure,
+  canConfigureAcademy,
+}: {
+  matchmaking: Matchmaking;
+  academy: AcademyProfile;
+  canConfigure: boolean;
+  canConfigureAcademy: boolean;
+}) {
   const router = useRouter();
   const { toast } = useToast();
   const [mm, setMm] = useState(matchmaking);
+  const [ac, setAc] = useState(academy);
   const [busy, setBusy] = useState(false);
-  const [peak, setPeak] = useState(true);
 
+  const mmDirty = JSON.stringify(mm) !== JSON.stringify(matchmaking);
+  const acDirty = JSON.stringify(ac) !== JSON.stringify(academy);
+  const dirty = (canConfigure && mmDirty) || (canConfigureAcademy && acDirty);
+
+  /** One Save for the page. Each section is only sent when it actually changed. */
   async function save() {
     setBusy(true);
-    const res = await updateMatchmakingConfigAction(mm);
+    const results: { label: string; ok: boolean; message?: string }[] = [];
+    if (canConfigure && mmDirty) {
+      const res = await updateMatchmakingConfigAction(mm);
+      results.push({ label: "Matchmaking rules", ok: res.ok, message: res.ok ? undefined : res.message });
+    }
+    if (canConfigureAcademy && acDirty) {
+      const res = await updateAcademySettingsAction({ ...ac, tagline: ac.tagline ?? "", supportPhone: ac.supportPhone ?? "" });
+      results.push({ label: "Academy details", ok: res.ok, message: res.ok ? undefined : res.message });
+    }
     setBusy(false);
-    if (res.ok) {
-      toast({ tone: "success", title: "Matchmaking rules saved" });
+    const failed = results.find((r) => !r.ok);
+    if (failed) toast({ tone: "danger", title: `Could not save ${failed.label.toLowerCase()}`, description: failed.message });
+    else if (results.length) {
+      toast({ tone: "success", title: results.length === 1 ? `${results[0].label} saved` : "Settings saved" });
       router.refresh();
-    } else toast({ tone: "danger", title: "Could not save", description: res.message });
+    }
   }
 
   return (
-    <AdminShell title="Settings" breadcrumb={["Settings"]} actions={canConfigure ? <Button onClick={save} loading={busy}>Save changes</Button> : undefined}>
+    <AdminShell
+      title="Settings"
+      breadcrumb={["Settings"]}
+      actions={
+        canConfigure || canConfigureAcademy ? (
+          <Button onClick={save} loading={busy} disabled={!dirty}>
+            {dirty ? "Save changes" : "Saved"}
+          </Button>
+        ) : undefined
+      }
+    >
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-4">
           <Card>
@@ -52,31 +91,122 @@ export function SettingsView({ matchmaking, canConfigure }: { matchmaking: Match
                 {(id) => <Input id={id} type="number" min={1} max={20} value={mm.maxOpenRequests} onChange={(e) => setMm({ ...mm, maxOpenRequests: Number(e.target.value) || 1 })} disabled={!canConfigure} />}
               </Field>
               {!canConfigure && (
-                <Alert tone="info" title="Read only">
+                <Alert tone="info" title="Read-only">
                   Only the Super Admin and Academy Owner change matchmaking rules.
                 </Alert>
               )}
             </div>
           </Card>
           <Alert tone="info" title="How matching ranks games">
-            Exact level 40 · any-level game 25 · adjacent 15 · home club 30 · preferred club 25 · selected club 20 · inside the time window 20 · preferred time 10 · completes the lineup 8. Ties break on start time, then game code.
+            Games are ranked by level fit first, then by how close the club is to the player's home and preferred clubs, then by how well the time suits them. A game that completes a lineup edges ahead of one that does not. Two games that score the same are ordered by start time.
           </Alert>
         </div>
         <div className="space-y-4">
           <Card>
-            <CardHeader title="Academy" description="Organisation-wide details (sample until the growth phase)" />
+            <CardHeader title="Academy" description="Your name, how players reach you, and the policy they agree to." />
             <div className="space-y-4">
-              <Field label="Academy name">{(id) => <Input id={id} defaultValue="HITTERS Sports Academy" />}</Field>
-              <Field label="Support email">{(id) => <Input id={id} type="email" defaultValue="hello@hitters.academy" />}</Field>
-              <Field label="Default timezone">{(id) => <Select id={id} defaultValue="Africa/Cairo" options={[{ value: "Africa/Cairo", label: "Africa/Cairo (GMT+2)" }, { value: "Europe/Madrid", label: "Europe/Madrid" }]} />}</Field>
-              <Field label="Cancellation policy" hint="Shown to players before they pay.">
-                {(id) => <Textarea id={id} defaultValue="Free cancellation up to 12 hours before the booking. Later cancellations are charged in full." />}
+              <Field label="Academy name" required>
+                {(id) => <Input id={id} value={ac.name} maxLength={120} onChange={(e) => setAc({ ...ac, name: e.target.value })} disabled={!canConfigureAcademy} />}
               </Field>
-              <Switch label="Peak pricing" description="Managed per location under Locations › Pricing" checked={peak} onChange={setPeak} />
+              <Field label="Tagline" hint="One line, used under the name wherever the academy is introduced.">
+                {(id, describedBy) => (
+                  <Input
+                    id={id}
+                    aria-describedby={describedBy}
+                    value={ac.tagline ?? ""}
+                    maxLength={200}
+                    placeholder="Premium padel across Egypt"
+                    onChange={(e) => setAc({ ...ac, tagline: e.target.value })}
+                    disabled={!canConfigureAcademy}
+                  />
+                )}
+              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Support email" required>
+                  {(id) => <Input id={id} type="email" value={ac.supportEmail} maxLength={160} onChange={(e) => setAc({ ...ac, supportEmail: e.target.value })} disabled={!canConfigureAcademy} />}
+                </Field>
+                <Field label="Support phone">
+                  {(id) => (
+                    <Input
+                      id={id}
+                      type="tel"
+                      value={ac.supportPhone ?? ""}
+                      maxLength={40}
+                      placeholder="+20 100 000 0000"
+                      onChange={(e) => setAc({ ...ac, supportPhone: e.target.value })}
+                      disabled={!canConfigureAcademy}
+                    />
+                  )}
+                </Field>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Default timezone" hint="Used for new clubs and anything not tied to one.">
+                  {(id, describedBy) => (
+                    <Select
+                      id={id}
+                      aria-describedby={describedBy}
+                      value={ac.defaultTimezone}
+                      onChange={(e) => setAc({ ...ac, defaultTimezone: e.target.value })}
+                      options={TIMEZONES.map((tz) => ({ value: tz, label: tz.replace("_", " ") }))}
+                      disabled={!canConfigureAcademy}
+                    />
+                  )}
+                </Field>
+                <Field label="Currency">
+                  {(id) => (
+                    <Select
+                      id={id}
+                      value={ac.currency}
+                      onChange={(e) => setAc({ ...ac, currency: e.target.value })}
+                      options={[
+                        { value: "EGP", label: "EGP · Egyptian pound" },
+                        { value: "AED", label: "AED · UAE dirham" },
+                        { value: "SAR", label: "SAR · Saudi riyal" },
+                        { value: "EUR", label: "EUR · Euro" },
+                      ]}
+                      disabled={!canConfigureAcademy}
+                    />
+                  )}
+                </Field>
+              </div>
+              <Field label="Cancellation policy" hint="Shown to players before they confirm a booking." required>
+                {(id, describedBy) => (
+                  <Textarea
+                    id={id}
+                    aria-describedby={describedBy}
+                    rows={3}
+                    value={ac.cancellationPolicy}
+                    maxLength={600}
+                    onChange={(e) => setAc({ ...ac, cancellationPolicy: e.target.value })}
+                    disabled={!canConfigureAcademy}
+                  />
+                )}
+              </Field>
+              {!canConfigureAcademy && (
+                <Alert tone="info" title="Read only">
+                  Only the Super Admin and Academy Owner change academy details.
+                </Alert>
+              )}
             </div>
           </Card>
-          <Alert tone="info" title="Payments not connected">
-            Connect a payment provider to enable online checkout and refunds.
+          <Card>
+            <CardHeader title="Pricing and payments" description="Where the money settings live" />
+            <ul className="space-y-3 text-body-sm text-fg-muted">
+              <li className="flex gap-2.5">
+                <span className="mt-2 size-1.5 shrink-0 rounded-full bg-blue-400" />
+                Court rates, peak hours, weekend and member adjustments are set per club under Locations, then Pricing, because every venue prices differently.
+              </li>
+              <li className="flex gap-2.5">
+                <span className="mt-2 size-1.5 shrink-0 rounded-full bg-blue-400" />
+                Lesson, program and package prices are set on each of those records.
+              </li>
+            </ul>
+            <Button variant="secondary" size="sm" href="/admin/locations" className="mt-4">
+              Open pricing
+            </Button>
+          </Card>
+          <Alert tone="info" title="Payments are recorded, not collected">
+            Every booking, lesson and package already carries a payment record marked pay at venue. Connecting a provider turns those into online checkout and refunds without changing the rest of the system.
           </Alert>
         </div>
       </div>

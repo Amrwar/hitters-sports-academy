@@ -4,6 +4,8 @@ import { listUsers } from "@/server/services/users";
 import { listManagedLocations } from "@/server/services/locations";
 import { MembersAdmin } from "./members-admin";
 
+export const metadata = { title: "Members" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminMembersPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {

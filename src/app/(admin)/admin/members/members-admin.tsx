@@ -68,7 +68,7 @@ export function MembersAdmin({ users, total, query, locations, canSuspend, canAs
         <StatTile size="lg" label="Visible members" value={total} />
         <StatTile size="lg" label="Staff accounts" value={staffCount} />
         <StatTile size="lg" label="Awaiting assessment" value={unassessed} delta={unassessed ? { value: "Book assessments", positive: false } : undefined} />
-        <StatTile size="lg" label="Your scope" value={<span className="text-h3">{me.isGlobal ? "All locations" : `${me.locationIds.length} location${me.locationIds.length === 1 ? "" : "s"}`}</span>} />
+        <StatTile size="lg" label="Your clubs" value={<span className="text-h3">{me.isGlobal ? "All locations" : `${me.locationIds.length} location${me.locationIds.length === 1 ? "" : "s"}`}</span>} />
       </div>
 
       <Card padding="sm" className="mt-5">

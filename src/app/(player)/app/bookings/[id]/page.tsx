@@ -4,6 +4,8 @@ import { isAppError } from "@/lib/errors";
 import { getBooking } from "@/server/services/bookings";
 import { BookingDetail } from "./booking-detail";
 
+export const metadata = { title: "Booking" };
+
 export const dynamic = "force-dynamic";
 
 export default async function BookingPage({ params }: { params: Promise<{ id: string }> }) {

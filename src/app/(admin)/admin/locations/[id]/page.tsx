@@ -7,6 +7,8 @@ import { listCourts } from "@/server/services/courts";
 import { listPricingRules } from "@/server/services/pricing";
 import { LocationEditor } from "./location-editor";
 
+export const metadata = { title: "Location" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminLocationPage({ params }: { params: Promise<{ id: string }> }) {

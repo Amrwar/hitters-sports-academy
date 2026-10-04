@@ -118,7 +118,7 @@ export function GamesAdmin({ locations, selectedId, status, scope, items, total,
                     <TD>
                       <div className="font-semibold">{g.description?.trim() || gameFormatLabel(g.format)}</div>
                       <div className="text-caption text-fg-muted tabular">
-                        {g.code} · {gameFormatLabel(g.format)} · {g.visibility === "PUBLIC" ? "discoverable" : "private"}
+                        {g.code} · {gameFormatLabel(g.format)} · {g.visibility === "PUBLIC" ? "Discoverable" : "Private"}
                         {g.openToRequests ? " · requests open" : ""}
                       </div>
                     </TD>
@@ -137,7 +137,7 @@ export function GamesAdmin({ locations, selectedId, status, scope, items, total,
                       </div>
                     </TD>
                     <TD>
-                      <div className="flex gap-1">{g.levels.length ? g.levels.map((l) => <LevelBadge key={l} level={l} size="sm" />) : <Badge size="sm">Any</Badge>}</div>
+                      <div className="flex gap-1">{g.levels.length ? g.levels.map((l) => <LevelBadge key={l} level={l} size="sm" />) : <Badge size="sm">Any level</Badge>}</div>
                     </TD>
                     <TD className="tabular">{costLabel(g)}</TD>
                     <TD>

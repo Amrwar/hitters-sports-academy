@@ -2,6 +2,8 @@ import { requireStaffOrRedirect } from "@/lib/auth/cookies";
 import { listReports } from "@/server/services/messaging";
 import { ModerationView, type ReportDto } from "./moderation-view";
 
+export const metadata = { title: "Moderation" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminModerationPage() {

@@ -16,6 +16,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import { CATEGORY_LABEL, CHANNELS, NOTIFICATION_CATEGORIES, render } from "@/lib/notifications";
 import { resetTemplateAction, sendAnnouncementAction, updateTemplateAction } from "@/server/actions/notifications";
+import { count } from "@/lib/text";
 
 export type TemplateDto = {
   type: string;
@@ -133,8 +134,30 @@ const SAMPLE: Record<string, string> = {
   summary: "The Tuesday session moved to 20:00.",
   assessor: "Coach Yasmin",
   kind: "Assessed",
-  verbose: "",
 };
+
+/** "game.request_waitlisted" reads as "Games and matchmaking: request waitlisted" for the card heading. */
+function templateTitle(type: string): string {
+  const [group, ...rest] = type.split(".");
+  const action = rest.join(" ").replace(/_/g, " ");
+  const groupName: Record<string, string> = {
+    booking: "Booking",
+    game: "Game",
+    match: "Match",
+    pair: "Pair",
+    lesson: "Lesson",
+    program: "Program",
+    package: "Package",
+    training: "Training",
+    trainer: "Coach",
+    assessment: "Assessment",
+    academy: "Academy",
+    staff: "Staff",
+    message: "Message",
+  };
+  const label = `${groupName[group] ?? group} ${action}`.trim();
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
 
 function TemplateCard({ template }: { template: TemplateDto }) {
   const router = useRouter();
@@ -151,8 +174,8 @@ function TemplateCard({ template }: { template: TemplateDto }) {
   return (
     <Card>
       <CardHeader
-        title={<span className="font-mono text-body-sm">{template.type}</span>}
-        description={template.updatedBy ? `Edited by ${template.updatedBy}` : "Using the HITTERS default wording"}
+        title={templateTitle(template.type)}
+        description={`${template.type} · ${template.updatedBy ? `edited by ${template.updatedBy}` : "using the HITTERS default wording"}`}
         action={
           <div className="flex items-center gap-2">
             {!enabled && <Badge tone="danger">Off</Badge>}
@@ -209,7 +232,7 @@ function TemplateCard({ template }: { template: TemplateDto }) {
               start(async () => {
                 const res = await updateTemplateAction(template.type, { title, body, enabled, channels });
                 if (res.ok) {
-                  toast({ tone: "success", title: `${template.type} saved` });
+                  toast({ tone: "success", title: "Template saved" });
                   router.refresh();
                 } else toast({ tone: "danger", title: "Could not save", description: res.message });
               })
@@ -237,7 +260,7 @@ function Announcement({ locations, academyWide }: { locations: { id: string; nam
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
-        <CardHeader title="Academy announcement" description="Goes to the notification centre of everyone in scope, and to email once that channel is connected." />
+        <CardHeader title="Academy announcement" description="Goes to the notification center of everyone you can reach, and to email once that channel is connected." />
         <div className="space-y-4">
           <Field label="Title" required>
             {(id) => <Input id={id} value={title} maxLength={120} placeholder="Courts closed Friday morning" onChange={(e) => setTitle(e.target.value)} />}
@@ -282,7 +305,7 @@ function Announcement({ locations, academyWide }: { locations: { id: string; nam
                   setSent(res.data);
                   setTitle("");
                   setBody("");
-                  toast({ tone: "success", title: `Sent to ${res.data.sent} people` });
+                  toast({ tone: "success", title: `Sent to ${count(res.data.sent, "person", "people")}` });
                 } else toast({ tone: "danger", title: "Could not send", description: res.message });
               })
             }
@@ -328,13 +351,13 @@ function Delivery({ stats }: { stats: DeliveryStat[] }) {
   });
   return (
     <div className="space-y-5">
-      <Alert tone="info" title="One row per channel, per notification">
+      <Alert tone="info" title="How delivery works">
         In-app delivery is immediate. Email, push and SMS rows are written the moment a notification is created and stay pending until a provider is registered, so nothing is lost when a channel is switched on
         later.
       </Alert>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {byChannel.map((c) => (
-          <StatTile key={c.value} label={c.label} value={c.total} delta={{ value: c.live ? "live" : "awaiting provider", positive: c.live }} />
+          <StatTile key={c.value} label={c.label} value={c.total} delta={{ value: c.live ? "Delivering now" : "Ready, needs a provider", positive: c.live }} />
         ))}
       </div>
       <section>
@@ -364,7 +387,6 @@ function Delivery({ stats }: { stats: DeliveryStat[] }) {
           </table>
         </Card>
       </section>
-      <p className="text-caption text-fg-subtle">Categories: {Object.values(CATEGORY_LABEL).join(" · ")}</p>
     </div>
   );
 }

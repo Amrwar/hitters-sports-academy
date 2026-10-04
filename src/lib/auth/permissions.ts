@@ -62,6 +62,7 @@ export const PERMISSIONS = [
   "package.manage",
   "package.purchase.own",
   // Notifications and messaging
+  "academy.configure",
   "notification.configure",
   "announcement.send",
   "message.participate",
@@ -76,7 +77,7 @@ export const PERMISSIONS = [
 export type Permission = (typeof PERMISSIONS)[number];
 
 /** Permissions that are never location scoped. */
-export const GLOBAL_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>(["location.create", "roles.manage", "users.suspend", "users.manage", "levels.configure", "matchmaking.configure", "notification.configure"]);
+export const GLOBAL_PERMISSIONS: ReadonlySet<Permission> = new Set<Permission>(["location.create", "roles.manage", "users.suspend", "users.manage", "levels.configure", "matchmaking.configure", "notification.configure", "academy.configure"]);
 
 const ALL = [...PERMISSIONS];
 

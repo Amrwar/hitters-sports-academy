@@ -12,7 +12,7 @@ import { Alert } from "@/components/ui/alert";
 import { ConfirmDialog } from "@/components/ui/modal";
 import { ConfirmationState, LoadingState } from "@/components/ui/states";
 import { cn } from "@/lib/cn";
-import { addDaysISO, DAY_SHORT, dayOfWeekISO, minutesToHHMM, todayISO } from "@/lib/time";
+import { DAY_SHORT, addDaysISO, dayOfWeekISO, longDate, minutesToHHMM, todayISO } from "@/lib/time";
 import type { LocationSchedule, Slot } from "@/server/services/availability";
 import type { BookingQuote, BookingView } from "@/server/services/bookings";
 import { createBookingAction, getScheduleAction, quoteBookingAction, rescheduleBookingAction } from "@/server/actions/bookings";
@@ -285,7 +285,7 @@ export function BookingFlow({ locations, initialLocationId, rescheduling, emailV
         title={rescheduling ? "Confirm new time" : "Confirm booking"}
         description={
           quote && selected
-            ? `${quote.court.name} at ${quote.location.name} on ${dateISO} ${minutesToHHMM(selected.startMinutes)}–${minutesToHHMM(selected.startMinutes + duration)}. Total ${money(quote.quote.totalCents)}, payable at the venue. Free cancellation up to ${quote.cancellationCutoffHours} hours before.`
+            ? `${quote.court.name} at ${quote.location.name} on ${longDate(dateISO)} ${minutesToHHMM(selected.startMinutes)}–${minutesToHHMM(selected.startMinutes + duration)}. Total ${money(quote.quote.totalCents)}, payable at the venue. Free cancellation up to ${quote.cancellationCutoffHours} hours before.`
             : ""
         }
         confirmLabel={rescheduling ? "Move booking" : `Confirm · ${quote ? money(quote.quote.totalCents) : ""}`}

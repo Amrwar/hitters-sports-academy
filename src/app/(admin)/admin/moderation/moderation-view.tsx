@@ -13,6 +13,7 @@ import { Field, Input } from "@/components/ui/input";
 import { Tabs } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import { decideReportAction, setThreadLockAction } from "@/server/actions/notifications";
+import { label } from "@/lib/catalog";
 
 export type ReportDto = {
   id: string;
@@ -54,7 +55,7 @@ export function ModerationView({ reports }: { reports: ReportDto[] }) {
           onChange={setStatus}
         />
         {rows.length === 0 ? (
-          <EmptyState icon={<ShieldCheck />} title={status === "OPEN" ? "Nothing to review" : "Nothing here"} description={status === "OPEN" ? "Reported messages land here for a decision." : undefined} />
+          <EmptyState icon={<ShieldCheck />} title={status === "OPEN" ? "Nothing to review" : status === "ACTIONED" ? "No actioned reports" : "No dismissed reports"} description={status === "OPEN" ? "Reported messages land here for a decision. Nothing waiting means the chats are behaving." : "Reports you decide on move here, with who decided and when."} />
         ) : (
           <div className="space-y-3">
             {rows.map((r) => (
@@ -98,8 +99,8 @@ function ReportCard({ report }: { report: ReportDto }) {
         description={`Reported by ${report.reporterName} · ${new Date(report.createdAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`}
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={tone[report.status]}>{report.status.toLowerCase()}</Badge>
-            {report.threadLocked && <Badge tone="neutral">locked</Badge>}
+            <Badge tone={tone[report.status]}>{label("reportStatus", report.status)}</Badge>
+            {report.threadLocked && <Badge tone="neutral">Locked</Badge>}
           </div>
         }
       />
@@ -127,7 +128,7 @@ function ReportCard({ report }: { report: ReportDto }) {
                 Remove message
               </Button>
               <Button size="sm" variant="secondary" leftIcon={<Check />} loading={pending} onClick={() => decide("ACTIONED", false)}>
-                Action without removing
+                Mark reviewed
               </Button>
               <Button size="sm" variant="ghost" loading={pending} onClick={() => decide("DISMISSED", false)}>
                 Dismiss

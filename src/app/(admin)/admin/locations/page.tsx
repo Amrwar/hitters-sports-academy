@@ -3,6 +3,8 @@ import { can } from "@/lib/auth/authorize";
 import { listManagedLocations } from "@/server/services/locations";
 import { LocationsAdmin } from "./locations-admin";
 
+export const metadata = { title: "Locations" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminLocationsPage() {

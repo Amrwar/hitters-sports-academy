@@ -5,6 +5,8 @@ import { ConfirmationState, EmptyState } from "@/components/ui/states";
 import { verifyEmail } from "@/server/services/auth";
 import { getActor } from "@/lib/auth/cookies";
 
+export const metadata = { title: "Verify your email" };
+
 export const dynamic = "force-dynamic";
 
 /** Landing page for the verification link. Consumes the token server-side. */

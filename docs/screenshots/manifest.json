@@ -103,8 +103,20 @@
   },
   {
     "name": "player-notifications",
-    "caption": "In-app notifications: bookings, assessments and staff updates.",
+    "caption": "Notification centre: category filters, unread first, grouped rows, mark all read.",
     "file": "docs/screenshots/player-notifications.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-notifications-filter",
+    "caption": "Filtered to games and matchmaking: invitations, join requests and lineup changes only.",
+    "file": "docs/screenshots/player-notifications-filter.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-notification-preferences",
+    "caption": "Notification preferences: every category against every channel, with email, push and SMS marked as awaiting a provider.",
+    "file": "docs/screenshots/player-notification-preferences.png",
     "viewport": "phone"
   },
   {
@@ -210,6 +222,18 @@
     "viewport": "phone"
   },
   {
+    "name": "player-messages",
+    "caption": "Messages: one conversation per game and per program, newest activity first.",
+    "file": "docs/screenshots/player-messages.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-game-chat",
+    "caption": "Group chat for a game: the lineup by name, photo and level, the conversation, and a report control on anyone else's message. No phone number or email is ever shown.",
+    "file": "docs/screenshots/player-game-chat.png",
+    "viewport": "phone"
+  },
+  {
     "name": "admin-dashboard",
     "caption": "Admin dashboard: today's bookings, occupancy by hour, revenue, members.",
     "file": "docs/screenshots/admin-dashboard.png",
@@ -309,6 +333,30 @@
     "name": "admin-packages",
     "caption": "Packages: catalogue and member purchases with credits, expiry and payments.",
     "file": "docs/screenshots/admin-packages.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-notification-templates",
+    "caption": "Notification templates by category: editable title and body, live preview, the placeholders each type can fill, channels and an on/off switch.",
+    "file": "docs/screenshots/admin-notification-templates.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-announcement",
+    "caption": "Academy announcement: title, message, club and audience, with a preview of the notification players will see.",
+    "file": "docs/screenshots/admin-announcement.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-notification-delivery",
+    "caption": "Delivery health per channel: in-app sent immediately, email, push and SMS queued until a provider is registered.",
+    "file": "docs/screenshots/admin-notification-delivery.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-moderation",
+    "caption": "Moderation queue: a reported message with the reason, the original text, and remove, action, dismiss or lock the conversation.",
+    "file": "docs/screenshots/admin-moderation.png",
     "viewport": "desktop"
   },
   {

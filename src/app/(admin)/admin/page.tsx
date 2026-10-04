@@ -5,6 +5,8 @@ import { listBookingsInScope } from "@/server/services/bookings";
 import { listManagedLocations } from "@/server/services/locations";
 import { DashboardView } from "./dashboard-view";
 
+export const metadata = { title: "Dashboard" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {

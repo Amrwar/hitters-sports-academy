@@ -27,6 +27,8 @@ import { GAME_COST_MODES, GAME_JOIN_POLICIES, GAME_LEVEL_POLICIES, GAME_VISIBILI
 import { formatInZone } from "@/lib/time";
 import type { GameView } from "@/server/services/game-sessions";
 import { cancelGameAction, confirmGameAction, inviteToGameAction, leaveGameAction, publishGameAction, removeParticipantAction, respondToInviteAction, updateGameAction } from "@/server/actions/game-sessions";
+import { label } from "@/lib/catalog";
+import { count } from "@/lib/text";
 
 type Compat = (MatchResult & { waitlist: boolean }) | null;
 type Props = {
@@ -216,7 +218,7 @@ export function GameDetail({ game, viewerId, staffCanManage, levels, compat, pai
         </Card>
       )}
       {myRequest && !openRequest && myRequest.status !== "ACCEPTED" && !me && (
-        <Alert tone={myRequest.status === "DECLINED" ? "warning" : "info"} title={`Your request was ${myRequest.status.toLowerCase()}`}>
+        <Alert tone={myRequest.status === "DECLINED" ? "warning" : "info"} title={myRequest.status === "EXPIRED" ? "Your request expired" : `Your request was ${label("requestStatus", myRequest.status).toLowerCase()}`}>
           {myRequest.decisionNote ? `Organizer: ${myRequest.decisionNote}` : myRequest.status === "EXPIRED" ? "The game started or the request timed out." : "You can ask again if a spot is still open."}
         </Alert>
       )}
@@ -265,7 +267,7 @@ export function GameDetail({ game, viewerId, staffCanManage, levels, compat, pai
       )}
       {game.status === "DRAFT" && organizer && (
         <Alert tone="info" title="Draft: only you and invited players can see this game">
-          Invite players, then publish to open it. {game.visibility === "PUBLIC" ? "It will be listed in Discover once published." : "It stays private unless you make it discoverable."}
+          Invite players, then publish to open it. {game.visibility === "PUBLIC" ? "It will be listed in Play once published." : "It stays private unless you make it discoverable."}
         </Alert>
       )}
       {error && (
@@ -351,13 +353,13 @@ export function GameDetail({ game, viewerId, staffCanManage, levels, compat, pai
       )}
       {organizer && live && game.openToRequests && openRequests.length === 0 && (
         <Card variant="outline" padding="sm" className="flex items-center gap-3 text-caption text-fg-subtle">
-          <Inbox size={16} /> Open to requests: compatible players at Level {game.levels.length ? game.levels.join("/") : "any"} can ask to join. You decide each one.
+          <Inbox size={16} /> Open to requests: compatible players {game.levels.length ? `at level ${game.levels.join(" or ")}` : "of any level"} can ask to join. You decide each one.
         </Card>
       )}
 
       {!organizer && staffCanManage && live && (
         <Button variant="ghost" fullWidth leftIcon={<XCircle />} className="text-danger hover:bg-danger/10 hover:text-danger" onClick={() => setCancel(true)}>
-          Cancel game (staff)
+          Cancel this game
         </Button>
       )}
 
@@ -366,7 +368,7 @@ export function GameDetail({ game, viewerId, staffCanManage, levels, compat, pai
           <li className="flex items-center gap-3 py-2.5">
             <Users size={16} className="text-blue-300" /> <span className="text-fg-muted">Format</span>
             <span className="ml-auto font-semibold">
-              {gameFormatLabel(game.format)} · {game.maxPlayers} players{game.matchType !== "ANY" ? ` · ${game.matchType === "FRIENDLY" ? "friendly" : "competitive"}` : ""}
+              {gameFormatLabel(game.format)} · {count(game.maxPlayers, "player")}{game.matchType !== "ANY" ? ` · ${label("matchType", game.matchType)}` : ""}
             </span>
           </li>
           <li className="flex items-center gap-3 py-2.5">
@@ -412,7 +414,7 @@ export function GameDetail({ game, viewerId, staffCanManage, levels, compat, pai
                     {p.user.playerProfile?.level && <LevelBadge level={p.user.playerProfile.level as PlayerLevel} size="sm" label={levels[p.user.playerProfile.level]} />}
                   </div>
                   <div className="text-caption capitalize text-fg-muted">
-                    {p.role === "ORGANIZER" ? "Organizer" : p.user.playerProfile?.side ? `${p.user.playerProfile.side.toLowerCase()} side` : "Player"}
+                    {p.role === "ORGANIZER" ? "Organizer" : p.user.playerProfile?.side ? label("side", p.user.playerProfile.side) : "Player"}
                     {p.pairId && <span className="normal-case text-blue-300"> · {teamLabel(p.pairId)}</span>}
                   </div>
                 </div>

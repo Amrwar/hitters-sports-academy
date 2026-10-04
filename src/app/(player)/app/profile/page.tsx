@@ -5,6 +5,8 @@ import { getAssessmentOverview, listPlayerAssessments } from "@/server/services/
 import { getLevelDefinitions } from "@/server/services/levels";
 import { ProfileView } from "./profile-view";
 
+export const metadata = { title: "Profile" };
+
 export const dynamic = "force-dynamic";
 
 export default async function ProfilePage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {

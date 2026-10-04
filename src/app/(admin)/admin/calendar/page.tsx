@@ -5,6 +5,8 @@ import { listManagedLocations } from "@/server/services/locations";
 import { getLocationSchedule } from "@/server/services/availability";
 import { CalendarView } from "./calendar-view";
 
+export const metadata = { title: "Court calendar" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminCalendarPage({ searchParams }: { searchParams: Promise<{ location?: string; date?: string }> }) {

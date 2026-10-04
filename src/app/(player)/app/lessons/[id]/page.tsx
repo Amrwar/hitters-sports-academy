@@ -5,6 +5,8 @@ import { getLesson } from "@/server/services/lessons";
 import { getLevelDefinitions } from "@/server/services/levels";
 import { LessonDetail } from "./lesson-detail";
 
+export const metadata = { title: "Lesson" };
+
 export const dynamic = "force-dynamic";
 
 export default async function LessonPage({ params }: { params: Promise<{ id: string }> }) {

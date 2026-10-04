@@ -104,7 +104,7 @@ export function BookingsAdmin({ locations, selectedId, dateISO, status, query, r
   return (
     <AdminShell title="Bookings" breadcrumb={["Operations", "Bookings"]} actions={canManage && selectedId ? <Button leftIcon={<Plus />} onClick={() => setCreate(true)}>New booking</Button> : undefined}>
       {locations.length === 0 ? (
-        <EmptyState icon={<CalendarDays />} title="No locations in your scope" />
+        <EmptyState icon={<CalendarDays />} title="No clubs assigned to you yet" description="Ask an academy owner to give you access to a location." />
       ) : (
         <>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

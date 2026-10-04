@@ -1,5 +1,53 @@
 import { z } from "zod";
 
+/**
+ * Plain wording for every validation failure that does not carry its own message.
+ *
+ * Without this, Zod's defaults reach the person filling in the form: "String must contain at least 2
+ * character(s)", "Invalid enum value. Expected 'A' | 'B'...", "Invalid cuid". A rule that passes its own
+ * message still wins; this only replaces the fallbacks.
+ */
+const friendlyErrors: z.ZodErrorMap = (issue, ctx) => {
+  switch (issue.code) {
+    case z.ZodIssueCode.invalid_type:
+      if (issue.received === "undefined" || issue.received === "null") return { message: "This is required." };
+      if (issue.expected === "number") return { message: "Enter a number." };
+      if (issue.expected === "date") return { message: "Choose a date." };
+      return { message: "Check this value." };
+    case z.ZodIssueCode.invalid_enum_value:
+    case z.ZodIssueCode.invalid_literal:
+    case z.ZodIssueCode.invalid_union_discriminator:
+      return { message: "Choose one of the options." };
+    case z.ZodIssueCode.invalid_string:
+      if (issue.validation === "email") return { message: "Enter a valid email address." };
+      if (issue.validation === "url") return { message: "Enter a valid link." };
+      if (issue.validation === "cuid" || issue.validation === "uuid") return { message: "Choose one of the options." };
+      return { message: "Check the format." };
+    case z.ZodIssueCode.too_small: {
+      const n = Number(issue.minimum);
+      if (issue.type === "string") return { message: n <= 1 ? "This is required." : `Use at least ${n} characters.` };
+      if (issue.type === "array") return { message: n <= 1 ? "Choose at least one." : `Choose at least ${n}.` };
+      if (issue.type === "date") return { message: "Choose a later date." };
+      return { message: `Enter ${n} or more.` };
+    }
+    case z.ZodIssueCode.too_big: {
+      const n = Number(issue.maximum);
+      if (issue.type === "string") return { message: `Keep it under ${n + 1} characters.` };
+      if (issue.type === "array") return { message: `Choose at most ${n}.` };
+      if (issue.type === "date") return { message: "Choose an earlier date." };
+      return { message: `Enter ${n} or less.` };
+    }
+    case z.ZodIssueCode.invalid_date:
+      return { message: "Choose a valid date." };
+    case z.ZodIssueCode.unrecognized_keys:
+      return { message: "Something unexpected was sent. Reload and try again." };
+    default:
+      return { message: ctx.defaultError };
+  }
+};
+
+z.setErrorMap(friendlyErrors);
+
 export const email = z
   .string()
   .trim()
@@ -537,3 +585,15 @@ export const messageSchema = z.object({ body: z.string().trim().min(1).max(2000)
 export const MESSAGE_REPORT_REASONS = ["Abusive or offensive", "Spam or advertising", "Harassment", "Personal information", "Other"] as const;
 export const messageReportSchema = z.object({ reason: z.enum(MESSAGE_REPORT_REASONS), note: z.string().trim().max(500).optional().or(z.literal("").transform(() => undefined)) });
 export const reportDecisionSchema = z.object({ decision: z.enum(["ACTIONED", "DISMISSED"]), removeMessage: z.coerce.boolean().default(false), outcome: z.string().trim().max(500).optional().or(z.literal("").transform(() => undefined)) });
+
+/* ------------------------------------------------------------------ Academy identity (phase: refinement) */
+
+export const academySettingsSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  tagline: z.string().trim().max(200).optional().or(z.literal("").transform(() => undefined)),
+  supportEmail: z.string().trim().toLowerCase().email("Enter a valid email address").max(160),
+  supportPhone: z.string().trim().max(40).optional().or(z.literal("").transform(() => undefined)),
+  defaultTimezone: z.string().trim().min(3).max(64),
+  currency: z.string().trim().toUpperCase().min(2).max(8),
+  cancellationPolicy: z.string().trim().min(10).max(600),
+});

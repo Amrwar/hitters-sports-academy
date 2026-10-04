@@ -213,7 +213,7 @@ function PhotosTab({ location, canManage }: { location: LocationView; canManage:
       </div>
       {canManage && (
         <Card className="space-y-4 self-start">
-          <CardHeader title="Add a photo" description="Object storage upload arrives with the storage provider; until then use the brand library or a hosted URL." />
+          <CardHeader title="Add a photo" description="Uploading from your computer is coming soon. For now, pick a brand photo or paste a link." />
           <div className="grid grid-cols-2 gap-2">
             {BRAND_PHOTOS.map((b) => (
               <button key={b.url} type="button" onClick={() => { setUrl(b.url); setAlt(b.alt); }} className={`relative h-20 overflow-hidden rounded-md border transition-all ${url === b.url ? "border-blue-400 shadow-glow-sm" : "border-line/10 hover:border-line/30"}`} aria-label={b.alt}>
@@ -324,8 +324,8 @@ function PolicyTab({ location, canManage }: { location: LocationView; canManage:
           </div>
         </Card>
         <div className="space-y-4 self-start">
-          <Alert tone="info" title="Used by the availability engine">
-            Slots inside the minimum notice or beyond the booking window are shown but not bookable. Cancellation and booking limits apply when booking launches.
+          <Alert tone="info" title="How these limits work">
+            Slots inside the minimum notice or beyond the booking window are shown but not bookable. Cancellation and booking limits apply to every new booking.
           </Alert>
           {canManage && (
             <Button type="submit" loading={busy} fullWidth>
@@ -360,7 +360,7 @@ function PricingTab({ location, courts, rules, canPrice }: { location: LocationV
   return (
     <div className="space-y-4">
       <Alert tone="info" title="How pricing works">
-        Each court&apos;s weekly template sets a base hourly rate. Rules below adjust it in priority order (lowest first): an absolute price replaces the base, a percentage scales the running total. Peak, off-peak, weekend and membership discounts are all rules, so new schemes need no code changes.
+        Each court&apos;s weekly template sets a base hourly rate. Rules below adjust it in priority order (lowest first): an absolute price replaces the base, a percentage scales the running total. Peak, off-peak, weekend and membership discounts are all rules, so you can add a new scheme at any time.
       </Alert>
       <div className="flex items-center justify-between">
         <div className="text-h4">{rules.length} rule{rules.length === 1 ? "" : "s"}</div>

@@ -408,6 +408,7 @@ model User {
   reportsMade             MessageReport[]          @relation("ReportReporter")
   reportsReviewed         MessageReport[]          @relation("ReportReviewedBy")
   threadsLocked           MessageThread[]          @relation("ThreadLockedBy")
+  academySettingsUpdated  AcademySettings[]        @relation("AcademySettingsUpdatedBy")
 
   @@index([status])
   @@index([globalRole])
@@ -983,6 +984,25 @@ model MatchmakingConfig {
   /// Open requests a player may have at once.
   maxOpenRequests     Int      @default(5)
   updatedAt           DateTime @updatedAt
+}
+
+/// Academy-wide identity and policy, edited from Admin, Settings. A single row with the id "default";
+/// every screen that needs the academy's name, contact details or standard policy wording reads it.
+model AcademySettings {
+  id                 String   @id @default("default")
+  name               String   @default("HITTERS Sports Academy") @db.VarChar(120)
+  tagline            String?  @db.VarChar(200)
+  supportEmail       String   @default("hello@hitters.academy") @db.VarChar(160)
+  supportPhone       String?  @db.VarChar(40)
+  /// Default zone for new locations and for anything not tied to one club.
+  defaultTimezone    String   @default("Africa/Cairo")
+  currency           String   @default("EGP") @db.VarChar(8)
+  /// Shown to players before they confirm a booking.
+  cancellationPolicy String   @default("Free cancellation up to 12 hours before the booking. Later cancellations are charged in full.") @db.VarChar(600)
+  updatedById        String?
+  updatedAt          DateTime @updatedAt
+
+  updatedBy User? @relation("AcademySettingsUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 }
 
 // ---------------------------------------------------------------- Academy: trainers, lessons, programs, packages

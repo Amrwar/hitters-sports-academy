@@ -9,6 +9,8 @@ import { listMyPairs } from "@/server/services/pairs";
 import { ThreadSection } from "@/components/patterns/thread-section";
 import { GameDetail } from "./game-view";
 
+export const metadata = { title: "Game" };
+
 export const dynamic = "force-dynamic";
 
 export default async function GamePage({ params }: { params: Promise<{ code: string }> }) {

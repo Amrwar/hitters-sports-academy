@@ -19,7 +19,7 @@ export default async function MessagesPage() {
       <PageHeader back="/app" title="Messages" />
       <p className="text-body-sm text-fg-muted">Every game you are playing and every program you are in has its own conversation. Nobody sees anyone else&apos;s phone number or email.</p>
 
-      {threads.length === 0 && <EmptyState icon={<MessageSquare />} title="No conversations yet" description="Join a game or enrol in a program and its chat opens here." action={<Button href="/app/play/find">Find a game</Button>} />}
+      {threads.length === 0 && <EmptyState icon={<MessageSquare />} title="No conversations yet" description="Join a game or enroll in a program and its chat opens here." action={<Button href="/app/play/find">Find a game</Button>} />}
 
       <div className="space-y-2.5">
         {threads.map((t) => (

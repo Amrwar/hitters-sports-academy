@@ -17,6 +17,7 @@ import { BookingStatusBadge, PAY_LABEL, PaymentStatusBadge, money } from "@/comp
 import { formatInZone } from "@/lib/time";
 import type { BookingView } from "@/server/services/bookings";
 import { cancelBookingAction, recordPaymentAction, setBookingStatusAction } from "@/server/actions/bookings";
+import { auditLabel, label } from "@/lib/catalog";
 
 type Log = { id: string; action: string; at: Date; by: string };
 
@@ -70,7 +71,7 @@ export function AdminBookingDetail({ booking, canManage, canPay, logs }: { booki
                 {booking.court.name} · {booking.location.name}
               </div>
               <div className="text-body-sm text-white/80">
-                {booking.durationMinutes} min · {money(booking.priceCents, booking.currency)} · source {booking.source.toLowerCase().replace("_", " ")} · {tz}
+                {booking.durationMinutes} min · {money(booking.priceCents, booking.currency)} · {label("bookingSource", booking.source)}
               </div>
             </div>
           </Card>
@@ -108,10 +109,10 @@ export function AdminBookingDetail({ booking, canManage, canPay, logs }: { booki
                   <Avatar name={p.user?.name ?? p.guestName ?? "Guest"} size="sm" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-body-sm font-bold">{p.user?.name ?? p.guestName ?? "Guest"}</div>
-                    <div className="text-caption capitalize text-fg-muted">{p.role.toLowerCase()}</div>
+                    <div className="text-caption capitalize text-fg-muted">{label("participantRole", p.role)}</div>
                   </div>
                   <Badge size="sm" tone={p.status === "JOINED" ? "success" : p.status === "INVITED" ? "warning" : "neutral"}>
-                    {p.status.toLowerCase()}
+                    {label("participantStatus", p.status)}
                   </Badge>
                 </li>
               ))}
@@ -131,7 +132,7 @@ export function AdminBookingDetail({ booking, canManage, canPay, logs }: { booki
               {logs.map((l) => (
                 <li key={l.id} className="text-body-sm">
                   <span className="absolute -left-1 mt-1.5 size-2 rounded-full bg-blue-400" />
-                  <span className="font-semibold capitalize">{l.action.replace("booking.", "").replace("payment.", "payment ").replace("_", " ")}</span>
+                  <span className="font-semibold capitalize">{auditLabel(l.action)}</span>
                   <span className="text-fg-muted">
                     {" "}
                     · {l.by} · {formatInZone(new Date(l.at), tz, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
@@ -144,7 +145,7 @@ export function AdminBookingDetail({ booking, canManage, canPay, logs }: { booki
 
         <div className="space-y-4">
           <Card>
-            <CardHeader title="Payment" description="Online payments arrive in a later phase. Record venue payments here." />
+            <CardHeader title="Payment" description="Online payments are not connected yet. Record venue payments here." />
             <div className="flex items-center justify-between rounded-md bg-surface-2 p-3">
               <div>
                 <div className="text-h3 tabular">{money(booking.priceCents, booking.currency)}</div>
@@ -179,7 +180,7 @@ export function AdminBookingDetail({ booking, canManage, canPay, logs }: { booki
                   </Button>
                 )}
                 {!started && !active && <p className="text-body-sm text-fg-muted">No actions available for this booking.</p>}
-                {active && !started && <p className="text-caption text-fg-subtle">Attendance can be recorded once the session has started.</p>}
+                {active && !started && <p className="text-caption text-fg-subtle">Attendance can be recorded once the booking has started.</p>}
               </div>
             </Card>
           )}
@@ -212,7 +213,7 @@ export function AdminBookingDetail({ booking, canManage, canPay, logs }: { booki
         >
           <Field label="Method">{(id) => <Select id={id} name="method" defaultValue="CASH" options={[{ value: "CASH", label: "Cash" }, { value: "CARD", label: "Card at venue" }, { value: "WALLET", label: "Wallet" }]} />}</Field>
           <Field label="Outcome">{(id) => <Select id={id} name="status" defaultValue="PAID" options={[{ value: "PAID", label: "Paid in full" }, { value: "WAIVED", label: "Waived (no charge)" }]} />}</Field>
-          <Input type="hidden" />
+          
           <div className="flex justify-end gap-2 pb-2">
             <Button type="button" variant="ghost" onClick={() => setPayOpen(false)}>
               Cancel

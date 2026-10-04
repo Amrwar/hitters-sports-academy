@@ -155,3 +155,125 @@ export const BRAND_PHOTOS = [
   { url: "/brand/court-line.jpg", alt: "Court line and ball" },
   { url: "/brand/court-handles.jpg", alt: "Rackets and balls" },
 ] as const;
+
+/* ------------------------------------------------------------------ Label maps for everything else */
+
+const fromPairs = <T extends readonly { value: string; label: string }[]>(rows: T): Record<string, string> => Object.fromEntries(rows.map((r) => [r.value, r.label]));
+
+/** One place to turn any stored enum into the words a person should read. */
+export const LABELS: Record<string, Record<string, string>> = {
+  gameStatus: fromPairs(GAME_STATUSES),
+  requestStatus: fromPairs(REQUEST_STATUSES),
+  courtStatus: fromPairs(COURT_STATUSES),
+  locationStatus: fromPairs(LOCATION_STATUSES),
+  attendance: fromPairs(ATTENDANCE_STATUSES),
+  matchType: fromPairs(MATCH_TYPES),
+  programCategory: fromPairs(PROGRAM_CATEGORIES),
+  side: { LEFT: "Left side", RIGHT: "Right side", BOTH: "Plays both sides" },
+  sideShort: { LEFT: "Left", RIGHT: "Right", BOTH: "Both sides" },
+  participantRole: { ORGANIZER: "Organizer", PLAYER: "Player" },
+  participantStatus: { INVITED: "Invited", ACCEPTED: "Joined", DECLINED: "Declined", LEFT: "Left", REMOVED: "Removed" },
+  bookingSource: { PLAYER_APP: "Booked in the app", ADMIN: "Booked by staff", WALK_IN: "Walk-in", IMPORT: "Imported" },
+  bookingStatus: { PENDING: "Pending", CONFIRMED: "Confirmed", CANCELLED: "Cancelled", COMPLETED: "Completed", NO_SHOW: "No-show" },
+  lessonStatus: { REQUESTED: "Awaiting the coach", CONFIRMED: "Confirmed", CANCELLED: "Cancelled", COMPLETED: "Completed", NO_SHOW: "No-show" },
+  enrollmentStatus: { ENROLLED: "Enrolled", WAITLISTED: "Waitlisted", CANCELLED: "Cancelled", COMPLETED: "Completed" },
+  programStatus: { DRAFT: "Draft", OPEN: "Open", FULL: "Full", IN_PROGRESS: "Running", COMPLETED: "Finished", CANCELLED: "Cancelled" },
+  reportStatus: { OPEN: "Open", ACTIONED: "Actioned", DISMISSED: "Dismissed" },
+  assessmentKind: { INITIAL: "Initial assessment", REASSESSMENT: "Reassessment", LEVEL_CHANGE: "Level change" },
+  visibility: { PUBLIC: "Anyone", MEMBERS: "HITTERS members", PRIVATE: "Only me" },
+  /** Why a slot cannot be booked, in words a player understands. */
+  slot: { available: "Available", booked: "Already booked", closed: "Court closed", location_closed: "Club closed", maintenance: "Under maintenance", too_soon: "Too close to start", outside_window: "Outside the booking window", past: "In the past" },
+  /** Assessment score fields. */
+  score: { serve: "Serve", forehand: "Forehand", backhand: "Backhand", volley: "Volley", bandeja: "Bandeja", smash: "Smash", lob: "Lob", positioning: "Positioning", tactics: "Tactics", movement: "Movement", consistency: "Consistency", fitness: "Fitness" },
+};
+
+/**
+ * The words for one stored value. Falls back to sentence case rather than the raw value, so a new enum
+ * member added to the database still reads properly before anyone adds it here.
+ */
+export function label(kind: keyof typeof LABELS | string, value: string | null | undefined): string {
+  if (!value) return "";
+  const found = LABELS[kind]?.[value];
+  if (found) return found;
+  const words = value.toLowerCase().replace(/_/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** The level filter on a game, program or coach, worded the same way everywhere. */
+export const ANY_LEVEL = "Any level";
+export const levelsLabel = (levels: readonly string[]): string => (levels.length === 0 ? ANY_LEVEL : `Level ${levels.join(" or ")}`);
+
+/**
+ * Audit actions in plain words, for the history timelines staff read. A key with no entry falls back to
+ * sentence case of its last segment, so a new action never shows as a dotted key.
+ */
+export const AUDIT_LABELS: Record<string, string> = {
+  "booking.created": "Booking created",
+  "booking.cancelled": "Booking cancelled",
+  "booking.rescheduled": "Booking moved",
+  "payment.recorded": "Payment recorded",
+  "game.created": "Game created",
+  "game.published": "Game published",
+  "game.confirmed": "Lineup confirmed",
+  "game.cancelled": "Game cancelled",
+  "game.updated": "Game edited",
+  "game.invited": "Players invited",
+  "game.accepted": "Invitation accepted",
+  "game.declined": "Invitation declined",
+  "game.left": "Player left",
+  "game.moved": "Game moved",
+  "game.requested": "Join request sent",
+  "game.request_accepted": "Join request accepted",
+  "game.request_declined": "Join request declined",
+  "game.request_withdrawn": "Join request withdrawn",
+  "lesson.booked": "Lesson booked",
+  "lesson.cancelled": "Lesson cancelled",
+  "lesson.rescheduled": "Lesson moved",
+  "note.added": "Coach note added",
+  "program.created": "Program created",
+  "program.updated": "Program edited",
+  "program.attendance": "Attendance marked",
+  "program.enrollment_cancelled": "Enrollment cancelled",
+  "program.promoted": "Moved off the waitlist",
+  "package.created": "Package created",
+  "package.purchased": "Package sold",
+  "package.cancelled": "Package cancelled",
+  "assessment.requested": "Assessment requested",
+  "assessment.scheduled": "Assessment scheduled",
+  "assessment.created": "Assessment recorded",
+  "assessment.level_changed": "Level changed",
+  "assessment.request_cancelled": "Assessment request cancelled",
+  "court.created": "Court created",
+  "court.updated": "Court edited",
+  "court.availability_set": "Opening hours set",
+  "court.closure_added": "Closure added",
+  "court.closure_removed": "Closure removed",
+  "location.created": "Club created",
+  "location.updated": "Club edited",
+  "location.policy_updated": "Booking policy updated",
+  "location.courts_closed": "Courts closed",
+  "staff.granted": "Role granted",
+  "staff.revoked": "Role revoked",
+  "message.reported": "Message reported",
+  "message.moderated": "Report decided",
+  "announcement.sent": "Announcement sent",
+  "notification.sent": "Notification sent",
+  "notification.template_updated": "Template edited",
+  "academy.configured": "Academy settings changed",
+  "matchmaking.configured": "Matchmaking rules changed",
+  "levels.configured": "Levels changed",
+  "profile.updated": "Profile updated",
+  "user.register": "Account created",
+  "user.email_verified": "Email verified",
+  "user.login": "Signed in",
+  "user.password_changed": "Password changed",
+  "user.global_role_set": "Account role changed",
+};
+
+export function auditLabel(action: string): string {
+  const found = AUDIT_LABELS[action];
+  if (found) return found;
+  const tail = action.split(".").pop() ?? action;
+  const words = tail.replace(/_/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}

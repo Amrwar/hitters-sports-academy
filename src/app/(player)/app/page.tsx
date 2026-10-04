@@ -18,6 +18,8 @@ import { formatInZone } from "@/lib/time";
 import { requireActorOrRedirect } from "@/lib/auth/cookies";
 import { getMyProfile } from "@/server/services/profiles";
 
+export const metadata = { title: "Home" };
+
 function greeting() {
   const h = new Date().getHours();
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";

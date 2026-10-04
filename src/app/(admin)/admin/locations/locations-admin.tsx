@@ -44,7 +44,7 @@ export function LocationsAdmin({ locations, canCreate }: { locations: LocationCa
   return (
     <AdminShell title="Locations" breadcrumb={["Operations", "Locations"]} actions={canCreate ? <Button leftIcon={<Plus />} onClick={() => setOpen(true)}>Add location</Button> : undefined}>
       {locations.length === 0 ? (
-        <EmptyState icon={<MapPin />} title="No locations in your scope" description="Ask an academy owner to add you to a location." />
+        <EmptyState icon={<MapPin />} title="No clubs assigned to you yet" description="Ask an academy owner to add you to a location." />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {locations.map((l, i) => (
@@ -113,7 +113,7 @@ export function LocationsAdmin({ locations, canCreate }: { locations: LocationCa
           </div>
         </form>
       </Modal>
-      <Badge className="mt-6">Open a location to edit details, photos, hours, facilities, policy and pricing</Badge>
+      <Badge className="mt-6">Open a club to edit its details, photos, hours, facilities, booking policy and pricing.</Badge>
     </AdminShell>
   );
 }

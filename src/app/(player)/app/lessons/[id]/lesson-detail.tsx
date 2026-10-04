@@ -20,6 +20,7 @@ import { addDaysISO, formatInZone, minutesToHHMM, todayISO } from "@/lib/time";
 import type { LessonView } from "@/server/services/lessons";
 import type { TrainerDay } from "@/server/services/trainers";
 import { cancelLessonAction, getTrainerDayAction, rescheduleLessonAction } from "@/server/actions/academy";
+import { label } from "@/lib/catalog";
 
 export function LessonDetail({ lesson, viewerId, levels }: { lesson: LessonView; viewerId: string; levels: Record<string, string> }) {
   const router = useRouter();
@@ -104,7 +105,7 @@ export function LessonDetail({ lesson, viewerId, levels }: { lesson: LessonView;
               {isPlayer ? lesson.trainer.user.name : lesson.player.name}
               {!isPlayer && lesson.player.playerProfile?.level && <LevelBadge level={lesson.player.playerProfile.level} size="sm" label={levels[lesson.player.playerProfile.level]} />}
             </div>
-            <div className="text-caption text-fg-muted">{isPlayer ? lesson.trainer.title : lesson.player.playerProfile?.side ? `${lesson.player.playerProfile.side.toLowerCase()} side` : "Player"}</div>
+            <div className="text-caption text-fg-muted">{isPlayer ? lesson.trainer.title : lesson.player.playerProfile?.side ? label("side", lesson.player.playerProfile.side) : "Player"}</div>
           </div>
           {isPlayer && (
             <Button size="sm" variant="ghost" href={`/app/trainers/${lesson.trainerId}`}>

@@ -3,6 +3,8 @@ import { listMyPairs } from "@/server/services/pairs";
 import { getLevelDefinitions } from "@/server/services/levels";
 import { PairsView } from "./pairs-view";
 
+export const metadata = { title: "Pairs" };
+
 export const dynamic = "force-dynamic";
 
 export default async function PairsPage() {

@@ -4,6 +4,8 @@ import { listManagedLocations } from "@/server/services/locations";
 import { listCourts } from "@/server/services/courts";
 import { CourtsAdmin } from "./courts-admin";
 
+export const metadata = { title: "Courts" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminCourtsPage({ searchParams }: { searchParams: Promise<{ location?: string }> }) {

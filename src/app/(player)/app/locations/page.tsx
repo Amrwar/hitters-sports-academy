@@ -6,6 +6,8 @@ import { LiveLocationCard } from "@/components/patterns/live-location-card";
 import { requireActorOrRedirect } from "@/lib/auth/cookies";
 import { listPublicLocations } from "@/server/services/locations";
 
+export const metadata = { title: "Clubs" };
+
 export default async function LocationsPage() {
   await requireActorOrRedirect("/app/locations");
   const locations = await listPublicLocations();

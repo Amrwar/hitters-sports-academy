@@ -24,6 +24,7 @@ import { PROGRAM_CATEGORIES } from "@/lib/catalog";
 import { DAY_NAMES, formatInZone } from "@/lib/time";
 import type { EnrollmentView, ProgramView, ScheduleSlot } from "@/server/services/programs";
 import { cancelEnrollmentAction, createProgramAction, enrollAction, recordAcademyPaymentAction, setProgramStatusAction, updateProgramAction } from "@/server/actions/academy";
+import { count } from "@/lib/text";
 
 type Props = {
   programs: ProgramView[];
@@ -200,7 +201,7 @@ export function ProgramsAdmin({ programs, trainers, locations, courts, levels, m
                   <TD className="text-fg-muted">
                     <div>{scheduleText(p.schedule)}</div>
                     <div className="text-caption">
-                      {formatInZone(new Date(p.startsOn), "UTC", { day: "numeric", month: "short" })} – {formatInZone(new Date(p.endsOn), "UTC", { day: "numeric", month: "short" })} · {p.sessionsCount} sessions
+                      {formatInZone(new Date(p.startsOn), "UTC", { day: "numeric", month: "short" })} – {formatInZone(new Date(p.endsOn), "UTC", { day: "numeric", month: "short" })} · {count(p.sessionsCount, "session")}
                     </div>
                   </TD>
                   <TD>
@@ -263,7 +264,7 @@ export function ProgramsAdmin({ programs, trainers, locations, courts, levels, m
             }
           />
           {roster.length === 0 ? (
-            <div className="text-body-sm text-fg-muted">Nobody yet.</div>
+            <div className="text-body-sm text-fg-muted">Nobody has enrolled yet.</div>
           ) : (
             <TableWrap>
               <Table>
@@ -319,7 +320,7 @@ export function ProgramsAdmin({ programs, trainers, locations, courts, levels, m
       <Modal open={create} onClose={() => setCreate(false)} title="Create a program" description="Saved as a draft; open it to take enrollments." size="lg">
         <Form p={null} />
       </Modal>
-      <Modal open={!!edit} onClose={() => setEdit(null)} title={edit ? `Edit ${edit.name}` : ""} description="Changing dates or the schedule regenerates the sessions while no attendance has been recorded." size="lg">
+      <Modal open={!!edit} onClose={() => setEdit(null)} title={edit ? `Edit ${edit.name}` : ""} description="If you change the dates or the schedule, the sessions are rebuilt, as long as no attendance has been marked yet." size="lg">
         {edit && <Form p={edit} />}
       </Modal>
       <Modal open={!!cancelP} onClose={() => setCancelP(null)} title={cancelP ? `Cancel ${cancelP.name}?` : ""} description="Everyone enrolled or waitlisted is notified and any payment is refunded." size="sm">

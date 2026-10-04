@@ -2,7 +2,19 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 
-export type AdminActor = { id: string; name: string; email: string; roleLabel: string; isGlobal: boolean; isSuperAdmin: boolean; locationIds: string[] };
+export type AdminActor = {
+  id: string;
+  name: string;
+  email: string;
+  roleLabel: string;
+  isGlobal: boolean;
+  isSuperAdmin: boolean;
+  locationIds: string[];
+  /** Unread in-app notifications for this staff member. */
+  unread: number;
+  /** Reported messages still waiting for a decision at their clubs. */
+  openReports: number;
+};
 
 const Ctx = createContext<AdminActor | null>(null);
 

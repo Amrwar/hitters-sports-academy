@@ -11,6 +11,8 @@ import { getLevelDefinitions } from "@/server/services/levels";
 import { getMyProfile } from "@/server/services/profiles";
 import { QuickAction } from "@/components/patterns/cards";
 
+export const metadata = { title: "Academy" };
+
 export const dynamic = "force-dynamic";
 
 export default async function ProgramsPage() {

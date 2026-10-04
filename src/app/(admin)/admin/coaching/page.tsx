@@ -8,6 +8,8 @@ import { getLevelDefinitions } from "@/server/services/levels";
 import { todayISO } from "@/lib/time";
 import { CoachingView } from "./coaching-view";
 
+export const metadata = { title: "Coaching" };
+
 export const dynamic = "force-dynamic";
 
 export default async function CoachingPage({ searchParams }: { searchParams: Promise<{ location?: string; date?: string; tab?: string }> }) {

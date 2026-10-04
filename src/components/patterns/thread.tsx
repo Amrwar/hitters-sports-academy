@@ -14,6 +14,7 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { MESSAGE_REPORT_REASONS } from "@/lib/validation/schemas";
 import { postMessageAction, reportMessageAction } from "@/server/actions/notifications";
+import { count } from "@/lib/text";
 
 export type ThreadMemberDto = { id: string; name: string; level: string | null; photoUrl: string | null; role: "ORGANIZER" | "COACH" | "PLAYER" };
 export type ThreadMessageDto = { id: string; body: string; createdAt: string; deleted: boolean; senderId: string; senderName: string; senderPhoto: string | null; reportedByMe: boolean };
@@ -68,7 +69,7 @@ export function Thread({ thread, meId }: { thread: ThreadDto; meId: string }) {
           <span key={m.id} className="inline-flex items-center gap-2 rounded-full border border-line/10 bg-surface-2 py-1 pl-1 pr-3">
             <Avatar name={m.name} src={m.photoUrl} size="xs" ring={m.id === meId} />
             <span className="text-caption font-semibold text-fg">{m.id === meId ? "You" : m.name.split(" ")[0]}</span>
-            {m.role !== "PLAYER" && <span className="text-caption text-fg-subtle">{m.role === "COACH" ? "Coach" : "Host"}</span>}
+            {m.role !== "PLAYER" && <span className="text-caption text-fg-subtle">{m.role === "COACH" ? "Coach" : "Organizer"}</span>}
             {m.level && <span className="text-caption text-fg-subtle">{m.level}</span>}
           </span>
         ))}
@@ -123,7 +124,7 @@ export function Thread({ thread, meId }: { thread: ThreadDto; meId: string }) {
             }}
           />
           <div className="flex items-center justify-between gap-3">
-            <p className="text-caption text-fg-subtle">Visible to the {thread.members.length} people in this lineup. Phone numbers stay private.</p>
+            <p className="text-caption text-fg-subtle">Visible to the {count(thread.members.length, "person", "people")} in this lineup. Phone numbers stay private.</p>
             <Button size="sm" leftIcon={<Send />} loading={pending} onClick={send} disabled={!body.trim()}>
               Send
             </Button>

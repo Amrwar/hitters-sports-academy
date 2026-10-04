@@ -20,10 +20,24 @@ import { PlayerPicker, type PickedPlayer } from "@/components/patterns/player-pi
 import { GAME_COST_MODES, GAME_FORMATS, GAME_JOIN_POLICIES, GAME_LEVEL_POLICIES, GAME_VISIBILITY, MATCH_TYPES } from "@/lib/catalog";
 import { formatInZone } from "@/lib/time";
 import { createGameAction } from "@/server/actions/game-sessions";
+import { count } from "@/lib/text";
 
 type BookingOption = { id: string; code: string; startsAt: string; endsAt: string; timezone: string; location: string; court: string; priceCents: number; currency: string; durationMinutes: number };
 
-export function NewGameForm({ bookings, preselect, levels, pairs }: { bookings: BookingOption[]; preselect: string | null; levels: { level: PlayerLevel; label: string }[]; pairs: { id: string; label: string; partnerId: string }[] }) {
+export function NewGameForm({
+  bookings,
+  preselect,
+  levels,
+  pairs,
+  preInvited = [],
+}: {
+  bookings: BookingOption[];
+  preselect: string | null;
+  levels: { level: PlayerLevel; label: string }[];
+  pairs: { id: string; label: string; partnerId: string }[];
+  /** Players already chosen, e.g. arriving from someone’s profile. */
+  preInvited?: PickedPlayer[];
+}) {
   const router = useRouter();
   const { toast } = useToast();
   const [bookingId, setBookingId] = useState<string | null>(bookings.find((b) => b.id === preselect)?.id ?? (bookings.length === 1 ? bookings[0].id : null));
@@ -38,7 +52,7 @@ export function NewGameForm({ bookings, preselect, levels, pairs }: { bookings: 
   const [levelPolicy, setLevelPolicy] = useState<"EXACT" | "ADJACENT">("EXACT");
   const [costMode, setCostMode] = useState("SPLIT_EVENLY");
   const [costPerPlayer, setCostPerPlayer] = useState("");
-  const [invites, setInvites] = useState<PickedPlayer[]>([]);
+  const [invites, setInvites] = useState<PickedPlayer[]>(preInvited);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
@@ -218,7 +232,7 @@ export function NewGameForm({ bookings, preselect, levels, pairs }: { bookings: 
           )}
           {share !== null && booking && (
             <Card variant="outline" padding="sm" className="text-body-sm text-fg-muted">
-              {money(booking.priceCents, booking.currency)} ÷ {players} players = <span className="font-bold text-fg tabular">{money(share, booking.currency)}</span> each, paid at the venue.
+              {money(booking.priceCents, booking.currency)} ÷ {count(players, "player")} = <span className="font-bold text-fg tabular">{money(share, booking.currency)}</span> each, paid at the venue.
             </Card>
           )}
         </section>

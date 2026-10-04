@@ -13,9 +13,10 @@ import { Alert } from "@/components/ui/alert";
 import { Spinner } from "@/components/ui/states";
 import { useToast } from "@/components/ui/toast";
 import { money } from "@/components/patterns/booking-status";
-import { addDaysISO, minutesToHHMM, todayISO } from "@/lib/time";
+import { addDaysISO, longDate, minutesToHHMM, plainDate, todayISO } from "@/lib/time";
 import type { TrainerDay } from "@/server/services/trainers";
 import { bookLessonAction, getTrainerDayAction } from "@/server/actions/academy";
+import { count } from "@/lib/text";
 
 type Props = {
   trainer: { id: string; name: string; rateCents: number; currency: string; durations: number[]; autoConfirm: boolean; levels: PlayerLevel[] };
@@ -130,7 +131,7 @@ export function BookLessonPanel({ trainer, locations, eligible, myLevel, credits
       </Button>
       {!trainer.autoConfirm && <p className="mt-2 text-center text-caption text-fg-subtle">{trainer.name} confirms each request personally.</p>}
 
-      <Modal open={confirm} onClose={() => setConfirm(false)} title={trainer.autoConfirm ? "Confirm your lesson" : "Request this lesson"} description={`${trainer.name} · ${dateISO} at ${start !== null ? minutesToHHMM(start) : ""} · ${duration} min`} size="sm">
+      <Modal open={confirm} onClose={() => setConfirm(false)} title={trainer.autoConfirm ? "Confirm your lesson" : "Request this lesson"} description={`${trainer.name} · ${longDate(dateISO)} at ${start !== null ? minutesToHHMM(start) : ""} · ${duration} min`} size="sm">
         <form onSubmit={book} className="space-y-4 pb-2">
           {error && (
             <Alert tone="danger" title="Could not book">
@@ -139,7 +140,7 @@ export function BookLessonPanel({ trainer, locations, eligible, myLevel, credits
           )}
           {usable.length > 0 && (
             <Field label="Pay with" hint="Credits are deducted now and refunded if you cancel in time.">
-              {(id) => <Select id={id} value={purchaseId} onChange={(e) => setPurchaseId(e.target.value)} options={[{ value: "", label: `Pay at the venue · ${money(price, trainer.currency)}` }, ...usable.map((c) => ({ value: c.id, label: `${c.name} · ${c.creditsLeft} credit${c.creditsLeft === 1 ? "" : "s"} left (until ${c.expiresAt})` }))]} />}
+              {(id) => <Select id={id} value={purchaseId} onChange={(e) => setPurchaseId(e.target.value)} options={[{ value: "", label: `Pay at the venue · ${money(price, trainer.currency)}` }, ...usable.map((c) => ({ value: c.id, label: `${c.name} · ${count(c.creditsLeft, "credit")} left, valid until ${plainDate(c.expiresAt)}` }))]} />}
             </Field>
           )}
           <Field label="What do you want to work on? (optional)">{(id) => <Textarea id={id} name="focus" maxLength={500} placeholder="Bandeja, net positioning, serve consistency" />}</Field>

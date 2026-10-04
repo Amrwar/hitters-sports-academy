@@ -10,6 +10,7 @@ import { ConfirmationState } from "@/components/ui/states";
 import { requestPasswordResetAction } from "@/server/actions/auth";
 import { AuthShell } from "../auth-shell";
 
+
 export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

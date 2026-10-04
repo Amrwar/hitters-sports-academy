@@ -9,6 +9,7 @@ import * as pricing from "@/server/services/pricing";
 import { grantStaffRole, revokeStaffRole, type MembershipView } from "@/server/services/staff";
 import { setGlobalRole, setUserStatus } from "@/server/services/users";
 import { createAssessment, type AssessmentView } from "@/server/services/assessments";
+import * as academySettings from "@/server/services/academy-settings";
 
 function obj(form: FormData): Record<string, string> {
   const out: Record<string, string> = {};
@@ -119,4 +120,10 @@ export async function setUserStatusAction(userId: string, status: "ACTIVE" | "SU
 
 export async function createAssessmentAction(form: FormData): Promise<ActionResult<AssessmentView>> {
   return run(async () => createAssessment(await getActor(), obj(form)), ["/admin/members"]);
+}
+
+/* ------------------------------------------------------------------ Academy identity */
+
+export async function updateAcademySettingsAction(input: Record<string, unknown>): Promise<ActionResult<academySettings.AcademyProfile>> {
+  return run(async () => academySettings.updateAcademySettings(await getActor(), input), ["/admin/settings", "/", "/app"]);
 }

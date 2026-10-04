@@ -15,6 +15,7 @@ import { LessonStatusBadge, PurchaseCard } from "@/components/patterns/academy";
 import { formatInZone } from "@/lib/time";
 import type { PackageView, PurchaseView } from "@/server/services/packages";
 import { purchasePackageAction } from "@/server/actions/academy";
+import { count } from "@/lib/text";
 
 export function PackagesView({ purchases, catalog }: { purchases: PurchaseView[]; catalog: PackageView[] }) {
   const router = useRouter();
@@ -62,10 +63,10 @@ export function PackagesView({ purchases, catalog }: { purchases: PurchaseView[]
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-body font-bold">
                   {c.name}
-                  <Badge size="sm">{c.credits} credits</Badge>
+                  <Badge size="sm">{count(c.credits, "credit")}</Badge>
                 </div>
                 <div className="text-caption text-fg-muted">
-                  {money(Math.round(c.priceCents / c.credits), c.currency)} per lesson · valid {c.validityDays} days{c.trainer ? ` · ${c.trainer.user.name}` : ""}{c.location ? ` · ${c.location.name.replace("HITTERS ", "")}` : " · any club"}
+                  {money(Math.round(c.priceCents / c.credits), c.currency)} per lesson · valid {c.validityDays} days{c.trainer ? ` · ${c.trainer.user.name}` : ""}{c.location ? ` · ${c.location.name.replace("HITTERS ", "")}` : " · Any club"}
                 </div>
               </div>
               <Button size="sm" onClick={() => setBuy(c)}>

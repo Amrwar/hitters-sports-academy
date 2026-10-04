@@ -13,6 +13,9 @@ import { requireActorOrRedirect } from "@/lib/auth/cookies";
 import { isAppError } from "@/lib/errors";
 import { getProfile } from "@/server/services/profiles";
 import { getLevelMap } from "@/server/services/levels";
+import { label } from "@/lib/catalog";
+
+export const metadata = { title: "Player" };
 
 export const dynamic = "force-dynamic";
 
@@ -53,16 +56,18 @@ export default async function PlayerProfilePage({ params }: { params: Promise<{ 
           <h2 className="truncate text-h2">{p.user.name}</h2>
           <div className="mt-1">{p.level ? <LevelBadge level={p.level} size="sm" withLabel label={levels[p.level].label} /> : <Badge>Not yet assessed</Badge>}</div>
           <div className="mt-1 text-caption text-fg-muted">
-            {p.side.charAt(0) + p.side.slice(1).toLowerCase()} side · {p.homeLocation?.name ?? "No home club"} · since {new Date(p.user.createdAt).toLocaleDateString("en", { month: "short", year: "numeric" })}
+            {label("side", p.side)} · {p.homeLocation?.name ?? "No home club"} · since {new Date(p.user.createdAt).toLocaleDateString("en", { month: "short", year: "numeric" })}
           </div>
         </div>
       </div>
 
       {!self && (
         <div className="grid grid-cols-2 gap-2">
-          <Button leftIcon={<UserPlus />}>Invite to match</Button>
-          <Button variant="secondary" href={`/app/play`}>
-            Find a session
+          <Button leftIcon={<UserPlus />} href={`/app/play/new?invite=${p.user.id}`}>
+            Invite to a game
+          </Button>
+          <Button variant="secondary" href="/app/play/find">
+            Find a match
           </Button>
         </div>
       )}

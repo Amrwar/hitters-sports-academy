@@ -320,16 +320,28 @@ async function main() {
         await db.message.create({ data: { threadId: thread.id, senderId: m.senderId, body: m.body, createdAt: new Date(Date.now() - m.minutesAgo * 60_000) } });
       }
     }
+    // One reported message so the moderation queue has something to decide on. Guarded on its own, so it
+    // still appears when the conversation above was seeded by an earlier run.
+    if ((await db.messageReport.count()) === 0) {
+      const omar = userIds.get("omar@example.com")!;
+      const salma = userIds.get("salma@example.com")!;
+      const flagged = await db.message.create({ data: { threadId: thread.id, senderId: salma, body: "Just WhatsApp me on 0100 000 0000 instead of using this chat.", createdAt: new Date(Date.now() - 10 * 60_000) } });
+      await db.messageReport.create({ data: { messageId: flagged.id, reporterId: omar, reason: "Personal information", note: "Posted a phone number in the group chat." } });
+    }
   }
 
   const amrId = userIds.get("amr@example.com")!;
-  if ((await db.notification.count({ where: { userId: amrId } })) < 3) {
-    const nc = LOCATIONS.find((l) => l.slug === "new-cairo")!.name;
-    const whenAmr = bAmr.startsAt.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-    await notify(amrId, { type: "booking.confirmed", url: `/app/bookings/${bAmr.id}`, data: { code: "HT-SEED02", club: nc, court: "Court 3", when: whenAmr, duration: 60 } });
-    await notify(amrId, { type: "package.purchased", url: "/app/packages", data: { package: "5 lessons", credits: 5, creditsPlural: "s", expires: new Date(Date.now() + 80 * 86_400_000).toISOString().slice(0, 10) } });
-    await notify(amrId, { type: "academy.announcement", url: "/app/notifications", dedupeKey: null, data: { title: "New Cairo courts resurfaced", body: "Courts 1 to 4 have fresh turf from Monday. Expect a slightly faster bounce." } });
-  }
+  // Idempotent per type, so a demo notification still appears when the account already has unrelated ones.
+  const ensureNotification = async (userId: string, type: string, input: Parameters<typeof notify>[1]) => {
+    if (await db.notification.findFirst({ where: { userId, type }, select: { id: true } })) return;
+    await notify(userId, input);
+  };
+  const nc = LOCATIONS.find((l) => l.slug === "new-cairo")!.name;
+  const whenAmr = bAmr.startsAt.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  await ensureNotification(amrId, "package.purchased", { type: "package.purchased", url: "/app/packages", data: { package: "5 lessons", credits: 5, creditsPlural: "s", expires: new Date(Date.now() + 80 * 86_400_000).toISOString().slice(0, 10) } });
+  await ensureNotification(amrId, "academy.announcement", { type: "academy.announcement", url: "/app/notifications", dedupeKey: null, data: { title: "New Cairo courts resurfaced", body: "Courts 1 to 4 have fresh turf from Monday. Expect a slightly faster bounce." } });
+  await ensureNotification(amrId, "booking.reminder", { type: "booking.reminder", url: `/app/bookings/${bAmr.id}`, dedupeKey: `booking.reminder:${bAmr.id}`, data: { code: "HT-SEED02", club: nc, court: "Court 3", when: whenAmr } });
+  await ensureNotification(amrId, "match.suggested", { type: "match.suggested", url: "/app/play/GM-SEED03", groupKey: "GM-SEED03", data: { when: "Thu 18:00", club: LOCATIONS.find((l) => l.slug === "sheikh-zayed")!.name, reasons: "Exact level match · Inside your preferred times", code: "GM-SEED03" } });
   console.log("notifications: done");
 
   console.log(`\nSeed complete. Sign in with any seeded email and the development password defined in prisma/seed.ts.`);

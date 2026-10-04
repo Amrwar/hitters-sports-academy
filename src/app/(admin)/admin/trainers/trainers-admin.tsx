@@ -82,11 +82,11 @@ export function TrainersAdmin({ trainers, candidates, locations, levels, canMana
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Title">{(id) => <Input id={id} name="title" required defaultValue={t?.title ?? ""} placeholder="Head coach" />}</Field>
         <Field label="Hourly rate (EGP)">{(id) => <Input id={id} name="rate" type="number" min={0} step={50} required defaultValue={t ? t.hourlyRateCents / 100 : 800} />}</Field>
-        <Field label="Lesson lengths (minutes, comma separated)">{(id) => <Input id={id} name="durations" defaultValue={t?.durationsMinutes.join(", ") ?? "60, 90"} />}</Field>
+        <Field label="Lesson lengths (minutes, comma-separated)">{(id) => <Input id={id} name="durations" defaultValue={t?.durationsMinutes.join(", ") ?? "60, 90"} />}</Field>
         <Field label="Years of experience">{(id) => <Input id={id} name="years" type="number" min={0} max={60} defaultValue={t?.yearsExperience ?? ""} />}</Field>
       </div>
       <Field label="Biography">{(id) => <Textarea id={id} name="bio" maxLength={2000} defaultValue={t?.bio ?? ""} />}</Field>
-      <Field label="Photo URL" hint="An https image link. Leave empty to show the coach's initials.">
+      <Field label="Photo URL" hint="An https image link. Leave empty to show their initials.">
         {(id) => (
           <div className="flex items-center gap-3">
             <Avatar name={t?.user.name ?? "Coach"} src={t?.photoUrl} size="md" />

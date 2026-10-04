@@ -11,6 +11,8 @@ import { getLevelDefinitions } from "@/server/services/levels";
 import { getMyProfile } from "@/server/services/profiles";
 import { FilterChips } from "./filter-chips";
 
+export const metadata = { title: "Coaches" };
+
 export const dynamic = "force-dynamic";
 
 export default async function TrainersPage({ searchParams }: { searchParams: Promise<{ location?: string; level?: string }> }) {

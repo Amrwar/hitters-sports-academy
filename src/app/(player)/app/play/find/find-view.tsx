@@ -30,6 +30,8 @@ type Props = {
   locations: { id: string; name: string; timezone: string }[];
   defaultLocationIds: string[];
   pairs: { id: string; label: string }[];
+  /** Preselected from /app/play/find?pair=, so a pair's own Find a match button keeps its context. */
+  initialPairId?: string | null;
 };
 
 const DAY_LABEL = (iso: string, tz: string) => {
@@ -40,7 +42,7 @@ const DAY_LABEL = (iso: string, tz: string) => {
   return d.toLocaleDateString("en", { weekday: "short", day: "numeric", timeZone: "UTC" });
 };
 
-export function FindMatchView({ viewerId, viewerLevel, levelLabel, locations, defaultLocationIds, pairs }: Props) {
+export function FindMatchView({ viewerId, viewerLevel, levelLabel, locations, defaultLocationIds, pairs, initialPairId }: Props) {
   const router = useRouter();
   const { toast } = useToast();
   const tz = locations[0]?.timezone ?? "Africa/Cairo";
@@ -49,8 +51,9 @@ export function FindMatchView({ viewerId, viewerLevel, levelLabel, locations, de
   const [to, setTo] = useState(22 * 60);
   const [anyTime, setAnyTime] = useState(true);
   const [locationIds, setLocationIds] = useState<string[]>(defaultLocationIds);
-  const [kind, setKind] = useState<"SOLO" | "PAIR">("SOLO");
-  const [pairId, setPairId] = useState<string>(pairs[0]?.id ?? "");
+  const preselected = initialPairId && pairs.some((p) => p.id === initialPairId) ? initialPairId : null;
+  const [kind, setKind] = useState<"SOLO" | "PAIR">(preselected ? "PAIR" : "SOLO");
+  const [pairId, setPairId] = useState<string>(preselected ?? pairs[0]?.id ?? "");
   const [result, setResult] = useState<FindResult | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);

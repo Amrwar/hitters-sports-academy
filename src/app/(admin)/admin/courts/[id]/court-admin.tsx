@@ -194,7 +194,7 @@ export function CourtAdmin({ court, canManage, canAvailability }: { court: Court
           </Card>
         )}
         <Card>
-          <CardHeader title="Closures" description="Overlapping periods are rejected. Adjacent periods are allowed." />
+          <CardHeader title="Closures" description="You cannot add a closure that overlaps an existing one. Back-to-back periods are fine." />
           {upcoming.length === 0 ? (
             <EmptyState compact icon={<CalendarRange />} title="No upcoming closures" description="The court follows its weekly hours." />
           ) : (
@@ -206,7 +206,7 @@ export function CourtAdmin({ court, canManage, canAvailability }: { court: Court
                       {formatInZone(new Date(c.startsAt), tz)} → {formatInZone(new Date(c.endsAt), tz)}
                     </div>
                     <div className="text-caption text-fg-muted">
-                      {c.reason ?? "No reason given"} · <span className="tabular">{utcToLocalInput(new Date(c.startsAt), tz).replace("T", " ")}</span> local
+                      {c.reason ?? "No reason given"} · <span className="tabular">{utcToLocalInput(new Date(c.startsAt), tz).replace("T", " ")}</span>
                     </div>
                   </div>
                   {new Date(c.startsAt) <= new Date() && <Badge tone="warning" dot>Active now</Badge>}

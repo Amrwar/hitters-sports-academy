@@ -85,7 +85,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
         <EmptyState
           icon={<BellOff />}
           title={category ? "Nothing here yet" : "You're all caught up"}
-          description={category ? "Try another category, or check back after your next session." : "We'll let you know when a session needs you or a booking changes."}
+          description={category ? "Try another category, or check back after your next session." : "We'll let you know when a game needs you or a booking changes."}
         />
       )}
 

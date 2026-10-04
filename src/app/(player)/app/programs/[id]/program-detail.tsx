@@ -19,6 +19,7 @@ import { programCategoryLabel } from "@/lib/catalog";
 import { formatInZone } from "@/lib/time";
 import type { EnrollmentView, ProgramView } from "@/server/services/programs";
 import { cancelEnrollmentAction, enrollAction } from "@/server/actions/academy";
+import { count } from "@/lib/text";
 
 const ATT_TONE = { PRESENT: "success", LATE: "warning", ABSENT: "danger", EXCUSED: "neutral" } as const;
 
@@ -60,7 +61,7 @@ export function ProgramDetail({ program: p, enrollment, levels, myLevel }: { pro
           {p.description && <p className="mt-2 text-body text-white/85">{p.description}</p>}
           <div className="mt-5 flex items-end justify-between">
             <div>
-              <div className="text-caption text-white/70">Full program · {p.sessionsCount} sessions</div>
+              <div className="text-caption text-white/70">Full program · {count(p.sessionsCount, "session")}</div>
               <div className="text-h2 tabular">{money(p.priceCents, p.currency)}</div>
             </div>
             <div className="text-right text-caption text-white/70">{money(Math.round(p.priceCents / p.sessionsCount), p.currency)} per session · pay at the venue</div>

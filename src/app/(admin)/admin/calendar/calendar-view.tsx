@@ -16,6 +16,7 @@ import { cn } from "@/lib/cn";
 import { addDaysISO, DAY_NAMES, dayOfWeekISO, minutesToHHMM } from "@/lib/time";
 import type { LocationSchedule, Slot } from "@/server/services/availability";
 import { addCourtClosureAction, closeLocationCourtsAction } from "@/server/actions/admin";
+import { count } from "@/lib/text";
 
 type Props = { locations: { id: string; name: string; timezone: string }[]; schedule: LocationSchedule | null; canManage: boolean };
 
@@ -67,7 +68,7 @@ export function CalendarView({ locations, schedule, canManage }: Props) {
   if (!schedule) {
     return (
       <AdminShell title="Court calendar" breadcrumb={["Operations", "Calendar"]}>
-        <EmptyState icon={<CalendarRange />} title="No locations in your scope" />
+        <EmptyState icon={<CalendarRange />} title="No clubs assigned to you yet" description="Ask an academy owner to give you access to a location." />
       </AdminShell>
     );
   }
@@ -96,7 +97,7 @@ export function CalendarView({ locations, schedule, canManage }: Props) {
     const res = await closeLocationCourtsAction(schedule!.location.id, { startLocal: String(f.get("startLocal")), endLocal: String(f.get("endLocal")), reason: String(f.get("reason") ?? "") || undefined });
     setBusy(false);
     if (res.ok) {
-      toast({ tone: "success", title: `${res.data.count} courts closed` });
+      toast({ tone: "success", title: `${count(res.data.count, "court")} closed` });
       setCloseAll(false);
       router.refresh();
     } else toast({ tone: "danger", title: res.message });
@@ -136,7 +137,7 @@ export function CalendarView({ locations, schedule, canManage }: Props) {
         <Badge tone="brand">{stats.available} available</Badge>
         <Badge tone="success">{stats.booked} booked</Badge>
         <Badge tone="warning">{stats.closed} closed</Badge>
-        <Badge>{stats.total} slots</Badge>
+        <Badge>{count(stats.total, "slot")}</Badge>
       </div>
 
       {schedule.courts.length === 0 ? (
@@ -186,7 +187,7 @@ export function CalendarView({ locations, schedule, canManage }: Props) {
         )}
       </Modal>
 
-      <Modal open={closeAll} onClose={() => setCloseAll(false)} title="Close all courts" description={`Every active court at ${schedule.location.name} gets a closure. Fails if any court already has one in the period.`}>
+      <Modal open={closeAll} onClose={() => setCloseAll(false)} title="Close all courts" description={`Every active court at ${schedule.location.name} gets a closure. If a court is already closed for part of this period, nothing is saved. Remove that closure first.`}>
         <form onSubmit={submitCloseAll} className="space-y-4">
           <Field label="From">{(id) => <Input id={id} name="startLocal" type="datetime-local" required defaultValue={`${schedule.dateISO}T09:00`} />}</Field>
           <Field label="Until">{(id) => <Input id={id} name="endLocal" type="datetime-local" required defaultValue={`${schedule.dateISO}T18:00`} />}</Field>

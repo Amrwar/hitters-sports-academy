@@ -10,6 +10,7 @@ import { Alert } from "@/components/ui/alert";
 import { registerAction } from "@/server/actions/auth";
 import { AuthShell } from "../auth-shell";
 
+
 export default function RegisterPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);

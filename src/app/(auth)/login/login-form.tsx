@@ -7,7 +7,7 @@ import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
-import { Checkbox, Divider } from "@/components/ui/misc";
+import { Checkbox } from "@/components/ui/misc";
 import { loginAction } from "@/server/actions/auth";
 import { AuthShell } from "../auth-shell";
 
@@ -82,15 +82,6 @@ export function LoginForm({ next, suspended }: { next: string; suspended: boolea
           Sign in
         </Button>
       </form>
-      <Divider label="or continue with" className="my-6" />
-      <div className="grid grid-cols-2 gap-3">
-        <Button variant="secondary" size="lg" disabled title="Coming soon">
-          Google
-        </Button>
-        <Button variant="secondary" size="lg" disabled title="Coming soon">
-          Apple
-        </Button>
-      </div>
       <p className="mt-8 text-center text-body-sm text-fg-muted">
         New to HITTERS?{" "}
         <Link href="/register" className="font-semibold text-blue-300 hover:text-blue-200">

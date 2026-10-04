@@ -7,6 +7,8 @@ import { getMyProfile } from "@/server/services/profiles";
 import { ThreadSection } from "@/components/patterns/thread-section";
 import { ProgramDetail } from "./program-detail";
 
+export const metadata = { title: "Program" };
+
 export const dynamic = "force-dynamic";
 
 export default async function ProgramPage({ params }: { params: Promise<{ id: string }> }) {

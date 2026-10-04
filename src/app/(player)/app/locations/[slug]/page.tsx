@@ -13,6 +13,9 @@ import { isAppError } from "@/lib/errors";
 import type { OpeningHours } from "@/lib/validation/schemas";
 import { getLocationPublic } from "@/server/services/locations";
 import { getLocationSchedule } from "@/server/services/availability";
+import { count } from "@/lib/text";
+
+export const metadata = { title: "Club" };
 
 const hhmm = (m: number) => (m === 1440 ? "24:00" : minutesToHHMM(m));
 
@@ -46,7 +49,7 @@ export default async function LocationPage({ params }: { params: Promise<{ slug:
             {i === 0 && (
               <div className="flex h-56 flex-col justify-end p-5 text-white">
                 <div className="flex flex-wrap gap-1.5">
-                  <Badge tone="brand">{loc.courts.filter((c) => c.status === "ACTIVE").length} courts</Badge>
+                  <Badge tone="brand">{count(loc.courts.filter((c) => c.status === "ACTIVE").length, "court")}</Badge>
                   {loc.status === "COMING_SOON" && <Badge tone="warning">Coming soon</Badge>}
                   {loc.openToday && <Badge className="bg-white/15 text-white">Today {hhmm(loc.openToday.opensAt)}–{hhmm(loc.openToday.closesAt)}</Badge>}
                 </div>
@@ -81,7 +84,7 @@ export default async function LocationPage({ params }: { params: Promise<{ slug:
         <ul className="divide-y divide-line/10 text-body-sm">
           <li className="flex items-center gap-3 py-2.5">
             <Clock size={16} className="text-blue-300" /> <span className="text-fg-muted">Today</span>{" "}
-            <span className="ml-auto font-semibold">{loc.openToday ? `${hhmm(loc.openToday.opensAt)} – ${hhmm(loc.openToday.closesAt)}` : hours ? "Closed today" : "Hours not set"}</span>
+            <span className="ml-auto font-semibold">{loc.openToday ? `${hhmm(loc.openToday.opensAt)} – ${hhmm(loc.openToday.closesAt)}` : hours ? "Closed today" : "Opening hours coming soon"}</span>
           </li>
           {loc.phone && (
             <li className="flex items-center gap-3 py-2.5">
@@ -134,7 +137,7 @@ export default async function LocationPage({ params }: { params: Promise<{ slug:
         <SectionHeader title="Courts" action={schedule ? <span className="text-caption text-fg-muted">Availability today</span> : undefined} />
         {loc.courts.length === 0 ? (
           <Card padding="md" className="text-body-sm text-fg-muted">
-            Courts are being set up.
+            Courts for this club are being set up. Check back shortly.
           </Card>
         ) : (
           <div className="grid grid-cols-2 gap-2.5">

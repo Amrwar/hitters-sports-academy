@@ -19,6 +19,7 @@ import { money, PaymentStatusBadge } from "@/components/patterns/booking-status"
 import { PurchaseBadge } from "@/components/patterns/academy";
 import type { PackageView, PurchaseView } from "@/server/services/packages";
 import { cancelPurchaseAction, createPackageAction, purchasePackageAction, recordAcademyPaymentAction, updatePackageAction } from "@/server/actions/academy";
+import { shortDate } from "@/lib/time";
 
 type Props = { catalog: PackageView[]; purchases: PurchaseView[]; trainers: { id: string; name: string }[]; locations: { id: string; name: string }[]; members: { id: string; name: string; email: string }[]; canManage: boolean; isGlobal: boolean };
 
@@ -62,7 +63,7 @@ export function PackagesAdmin({ catalog, purchases, trainers, locations, members
     const f = new FormData(e.currentTarget);
     const packageId = String(f.get("packageId") ?? "");
     const data = packageId ? { packageId, playerId: String(f.get("playerId")) } : { playerId: String(f.get("playerId")), name: String(f.get("name") ?? ""), credits: Number(f.get("credits") || 0), priceCents: Math.round(Number(f.get("price") || 0) * 100), validityDays: Number(f.get("validityDays") || 90) };
-    const ok = await act("sell", "Package sold; take payment at the desk", () => purchasePackageAction(data));
+    const ok = await act("sell", "Package sold; take payment at the venue", () => purchasePackageAction(data));
     if (ok) setSell(false);
   }
 
@@ -75,7 +76,7 @@ export function PackagesAdmin({ catalog, purchases, trainers, locations, members
         <Field label="Price (EGP)">{(id) => <Input id={id} name="price" type="number" min={0} step={50} required defaultValue={p ? p.priceCents / 100 : 7500} />}</Field>
         <Field label="Valid for (days)">{(id) => <Input id={id} name="validityDays" type="number" min={7} max={730} defaultValue={p?.validityDays ?? 90} />}</Field>
         <Field label="Trainer (optional)">{(id) => <Select id={id} name="trainerId" defaultValue={p?.trainerId ?? ""} options={[{ value: "", label: "Any trainer" }, ...trainers.map((t) => ({ value: t.id, label: t.name }))]} />}</Field>
-        <Field label="Club" hint={isGlobal ? "Leave empty for an academy-wide package." : "Location roles create club packages."}>
+        <Field label="Club" hint={isGlobal ? "Leave empty for an academy-wide package." : "Staff at one club create packages for that club only."}>
           {(id) => <Select id={id} name="locationId" defaultValue={p?.locationId ?? (isGlobal ? "" : locations[0]?.id ?? "")} options={[...(isGlobal ? [{ value: "", label: "Every club" }] : []), ...locations.map((l) => ({ value: l.id, label: l.name }))]} />}
         </Field>
       </div>
@@ -112,7 +113,7 @@ export function PackagesAdmin({ catalog, purchases, trainers, locations, members
       }
     >
       <Card>
-        <CardHeader title="Catalogue" description="Prepaid lesson bundles. Credits are deducted when a lesson is booked and returned when it is cancelled in time." />
+        <CardHeader title="Catalog" description="Prepaid lesson bundles. Credits are deducted when a lesson is booked and returned when it is cancelled in time." />
         {catalog.length === 0 ? (
           <EmptyState compact icon={<Package />} title="No packages yet" />
         ) : (
@@ -142,7 +143,7 @@ export function PackagesAdmin({ catalog, purchases, trainers, locations, members
                     <TD className="text-right tabular">{money(Math.round(p.priceCents / p.credits), p.currency)}</TD>
                     <TD className="text-fg-muted">{p.validityDays} days</TD>
                     <TD className="text-fg-muted">
-                      {p.trainer?.user.name ?? "Any trainer"} · {p.location?.name.replace("HITTERS ", "") ?? "every club"}
+                      {p.trainer?.user.name ?? "Any trainer"} · {p.location?.name.replace("HITTERS ", "") ?? "Every club"}
                     </TD>
                     <TD>
                       <Badge size="sm" tone={p.active ? "success" : "neutral"} dot>
@@ -167,7 +168,7 @@ export function PackagesAdmin({ catalog, purchases, trainers, locations, members
       <Card className="mt-5">
         <CardHeader title="Purchases" description="Credits, usage and expiry per member. Record venue payments here." />
         {purchases.length === 0 ? (
-          <div className="text-body-sm text-fg-muted">No purchases yet.</div>
+          <div className="text-body-sm text-fg-muted">No purchases yet. Sell a package from the button above.</div>
         ) : (
           <TableWrap>
             <Table>
@@ -197,7 +198,7 @@ export function PackagesAdmin({ catalog, purchases, trainers, locations, members
                     <TD className="text-right tabular">
                       {p.creditsLeft} / {p.credits}
                     </TD>
-                    <TD className="text-fg-muted">{p.expiresAt.toISOString().slice(0, 10)}</TD>
+                    <TD className="text-fg-muted">{shortDate(p.expiresAt)}</TD>
                     <TD>{p.payments[0] ? <PaymentStatusBadge status={p.payments[0].status} size="sm" /> : "—"}</TD>
                     <TD>
                       <PurchaseBadge status={p.status} />
@@ -230,10 +231,10 @@ export function PackagesAdmin({ catalog, purchases, trainers, locations, members
       <Modal open={!!edit} onClose={() => setEdit(null)} title={edit ? `Edit ${edit.name}` : ""} size="lg">
         {edit && <Form p={edit} />}
       </Modal>
-      <Modal open={sell} onClose={() => setSell(false)} title="Sell a package" description="Pick a catalogue package, or leave it empty and enter a custom one.">
+      <Modal open={sell} onClose={() => setSell(false)} title="Sell a package" description="Pick a catalog package, or leave it empty and enter a custom one.">
         <form onSubmit={submitSell} className="space-y-4 pb-2">
           <Field label="Member">{(id) => <Select id={id} name="playerId" required placeholder="Choose a member" options={members.map((m) => ({ value: m.id, label: `${m.name} · ${m.email}` }))} />}</Field>
-          <Field label="Catalogue package">{(id) => <Select id={id} name="packageId" options={[{ value: "", label: "Custom package (enter below)" }, ...catalog.filter((c) => c.active).map((c) => ({ value: c.id, label: `${c.name} · ${c.credits} credits · ${money(c.priceCents, c.currency)}` }))]} />}</Field>
+          <Field label="Catalog package">{(id) => <Select id={id} name="packageId" options={[{ value: "", label: "Custom package (enter below)" }, ...catalog.filter((c) => c.active).map((c) => ({ value: c.id, label: `${c.name} · ${c.credits} credits · ${money(c.priceCents, c.currency)}` }))]} />}</Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Custom name">{(id) => <Input id={id} name="name" placeholder="Custom 8" />}</Field>
             <Field label="Credits">{(id) => <Input id={id} name="credits" type="number" min={1} max={100} />}</Field>

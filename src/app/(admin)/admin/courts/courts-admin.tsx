@@ -78,7 +78,7 @@ export function CourtsAdmin({ locations, selectedId, courts, canManage }: Props)
       }
     >
       {locations.length === 0 ? (
-        <EmptyState icon={<LayoutGrid />} title="No locations in your scope" />
+        <EmptyState icon={<LayoutGrid />} title="No clubs assigned to you yet" description="Ask an academy owner to give you access to a location." />
       ) : (
         <>
           <Tabs variant="pill" value={selectedId ?? ""} onChange={(id) => router.push(`/admin/courts?location=${id}`)} items={locations.map((l) => ({ value: l.id, label: l.name.replace("HITTERS ", "") }))} className="w-fit max-w-full overflow-x-auto" />

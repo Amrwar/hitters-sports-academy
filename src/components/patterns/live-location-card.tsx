@@ -5,6 +5,7 @@ import { CourtBackdrop } from "@/components/patterns/cards";
 import { facilityLabel } from "@/lib/catalog";
 import { minutesToHHMM } from "@/lib/time";
 import type { LocationCard } from "@/server/services/locations";
+import { count } from "@/lib/text";
 
 const FALLBACK = "/brand/court-net.jpg";
 
@@ -35,7 +36,7 @@ export function LiveLocationCard({ location, compact }: { location: LocationCard
       <div className="flex items-center justify-between px-4 py-3 text-body-sm">
         <div className="flex min-w-0 items-center gap-1.5 text-fg-muted">
           <LayoutGrid size={14} className="shrink-0" />
-          <span className="truncate">{location.facilities.slice(0, 3).map(facilityLabel).join(" · ") || `${location._count.courts} courts`}</span>
+          <span className="truncate">{location.facilities.slice(0, 3).map(facilityLabel).join(" · ") || `${count(location._count.courts, "court")}`}</span>
         </div>
         {location.priceFromCents != null && (
           <div className="shrink-0">

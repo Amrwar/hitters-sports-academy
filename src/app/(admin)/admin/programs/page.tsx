@@ -8,6 +8,8 @@ import { listUsers } from "@/server/services/users";
 import { getLevelDefinitions } from "@/server/services/levels";
 import { ProgramsAdmin } from "./programs-admin";
 
+export const metadata = { title: "Programs" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminProgramsPage({ searchParams }: { searchParams: Promise<{ program?: string }> }) {

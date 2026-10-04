@@ -9,6 +9,8 @@ import { getLevelDefinitions } from "@/server/services/levels";
 import { listManagedLocations } from "@/server/services/locations";
 import { MemberDetail } from "./member-detail";
 
+export const metadata = { title: "Member" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminMemberPage({ params }: { params: Promise<{ id: string }> }) {

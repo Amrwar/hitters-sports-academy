@@ -11,6 +11,8 @@ import { Modal } from "@/components/ui/modal";
 import { Field, Textarea } from "@/components/ui/input";
 import { MatchReasons, RequestStatusBadge } from "@/components/patterns/match-reasons";
 import type { RequestReview } from "@/server/services/matchmaking";
+import { label } from "@/lib/catalog";
+import { count } from "@/lib/text";
 
 type Props = {
   request: RequestReview;
@@ -43,8 +45,8 @@ export function RequestReviewCard({ request: r, levels, spotsLeft, onDecide, bus
             <span className="flex items-center gap-1">
               <Users size={12} /> {r.kind === "PAIR" ? `Pair · ${r.pair?.name?.trim() || "both spots"}` : "Solo · 1 spot"}
             </span>
-            {r.members.map((m) => m.side && <span key={m.id}>{m.name.split(" ")[0]}: {m.side.toLowerCase()} side</span>)}
-            {r.user.playerProfile?.yearsPlaying != null && <span>{r.user.playerProfile.yearsPlaying} yrs</span>}
+            {r.members.map((m) => m.side && <span key={m.id}>{m.name.split(" ")[0]}: {label("sideShort", m.side)}</span>)}
+            {r.user.playerProfile?.yearsPlaying != null && <span>{count(r.user.playerProfile.yearsPlaying, "year")} playing</span>}
             <span className="flex items-center gap-1">
               <History size={12} /> {r.playedTogether === null ? "History private" : r.playedTogether === 0 ? "First game together" : `${r.playedTogether} game${r.playedTogether === 1 ? "" : "s"} together`}
             </span>

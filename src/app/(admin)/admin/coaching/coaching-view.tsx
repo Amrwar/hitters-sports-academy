@@ -27,6 +27,7 @@ import type { LessonView, Student } from "@/server/services/lessons";
 import type { EnrollmentView, ProgramView } from "@/server/services/programs";
 import { addProgressNoteAction, addTimeOffAction, markAttendanceAction, markLessonAttendanceAction, recordAcademyPaymentAction, removeTimeOffAction, respondToLessonRequestAction, setTrainerAvailabilityAction, updateTrainerProfileAction, cancelLessonAction } from "@/server/actions/academy";
 import { listProgramEnrollmentsAction } from "@/server/actions/academy-reads";
+import { count } from "@/lib/text";
 
 type TrainerData = { profile: TrainerView; upcoming: LessonView[]; requests: LessonView[]; past: LessonView[]; students: Student[]; programs: ProgramView[] };
 type Props = {
@@ -74,7 +75,7 @@ export function CoachingView({ viewerId, levelLabels, trainer, clubs, selectedCl
 
   const LessonTable = ({ rows, viewer, actions }: { rows: LessonView[]; viewer: "trainer" | "staff"; actions?: (l: LessonView) => React.ReactNode }) =>
     rows.length === 0 ? (
-      <EmptyState compact icon={<CalendarDays />} title="Nothing here" description="Lessons appear as players book inside your availability." />
+      <EmptyState compact icon={<CalendarDays />} title="Nothing to show" description="Lessons appear as players book inside your availability." />
     ) : (
       <TableWrap>
         <Table>
@@ -174,7 +175,7 @@ export function CoachingView({ viewerId, levelLabels, trainer, clubs, selectedCl
           <StatTile label="Programs" value={trainer.programs.filter((p) => ["OPEN", "FULL", "IN_PROGRESS"].includes(p.status)).length} />
         </div>
       )}
-      {!trainer && clubs.length === 0 && <EmptyState icon={<GraduationCap />} title="No coaching data" description="This page shows a trainer's calendar or the lessons at clubs you manage." />}
+      {!trainer && clubs.length === 0 && <EmptyState icon={<GraduationCap />} title="Nothing to coach yet" description="This page shows a trainer's calendar or the lessons at clubs you manage." />}
       {items.length > 0 && <Tabs value={tab} onChange={setTab} items={items} />}
 
       {trainer && tab === "calendar" && (
@@ -204,7 +205,7 @@ export function CoachingView({ viewerId, levelLabels, trainer, clubs, selectedCl
                       <span className="flex-1 truncate">
                         {p.name} · session {s.index}
                       </span>
-                      <span className="text-fg-muted">{p.enrolledCount} players</span>
+                      <span className="text-fg-muted">{count(p.enrolledCount, "player")}</span>
                     </li>
                   ))}
               </ul>
@@ -400,7 +401,7 @@ function AvailabilityEditor({ trainer, clubs, onSaved }: { trainer: TrainerView;
       <Card className="lg:col-span-2">
         <CardHeader title="Weekly coaching hours" description="Players can only book inside these windows. One window per club per block; windows must not overlap." action={<Button size="sm" variant="secondary" leftIcon={<Plus />} onClick={() => setRows([...rows, { locationId: clubs[0]?.id ?? "", dayOfWeek: 1, startMinutes: 9 * 60, endMinutes: 13 * 60 }])}>Add window</Button>} />
         <div className="space-y-2">
-          {rows.length === 0 && <div className="text-body-sm text-fg-muted">No windows yet: you are not bookable until you add some.</div>}
+          {rows.length === 0 && <div className="text-body-sm text-fg-muted">No windows yet: players cannot book you until you add at least one.</div>}
           {rows.map((r, i) => (
             <div key={i} className="grid grid-cols-[1fr_1fr_auto_auto_auto] items-center gap-2">
               <Select size="sm" value={String(r.dayOfWeek)} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, dayOfWeek: Number(e.target.value) } : x)))} options={DAY_NAMES.map((d, k) => ({ value: String(k), label: d }))} />
@@ -491,7 +492,7 @@ function TrainerPrograms({ programs, levelLabels }: { programs: ProgramView[]; l
     const res = await markAttendanceAction(open.sessionId, roster.map((e) => ({ enrollmentId: e.id, status: marks[e.id] })));
     setBusy(false);
     if (res.ok) {
-      toast({ tone: "success", title: `Attendance saved for ${res.data.marked} players` });
+      toast({ tone: "success", title: `Attendance saved for ${count(res.data.marked, "player")}` });
       setOpen(null);
       router.refresh();
     } else toast({ tone: "danger", title: "Could not save", description: res.message });
@@ -508,7 +509,7 @@ function TrainerPrograms({ programs, levelLabels }: { programs: ProgramView[]; l
                 {p.name} <ProgramStatusBadge status={p.status} size="sm" />
               </span>
             }
-            description={`${p.location.name.replace("HITTERS ", "")} · ${scheduleText(p.schedule)} · ${p.enrolledCount}/${p.capacity} enrolled${p.waitlistCount ? ` · ${p.waitlistCount} waitlisted` : ""} · ${p.levels.length ? p.levels.map((l) => levelLabels[l] ?? l).join(", ") : "any level"}`}
+            description={`${p.location.name.replace("HITTERS ", "")} · ${scheduleText(p.schedule)} · ${p.enrolledCount}/${p.capacity} enrolled${p.waitlistCount ? ` · ${p.waitlistCount} waitlisted` : ""} · ${p.levels.length ? p.levels.map((l) => levelLabels[l] ?? l).join(", ") : "Any level"}`}
             action={
               <Button size="sm" variant="ghost" href={`/admin/programs?program=${p.id}`}>
                 Roster
@@ -551,7 +552,7 @@ function TrainerPrograms({ programs, levelLabels }: { programs: ProgramView[]; l
               <Select size="sm" value={marks[e.id]} onChange={(ev) => setMarks({ ...marks, [e.id]: ev.target.value as "PRESENT" })} options={ATTENDANCE_STATUSES.map((s) => ({ value: s.value, label: s.label }))} />
             </div>
           ))}
-          {roster.length === 0 && <div className="text-body-sm text-fg-muted">Nobody is enrolled.</div>}
+          {roster.length === 0 && <div className="text-body-sm text-fg-muted">Nobody has enrolled yet.</div>}
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={() => setOpen(null)}>
               Cancel

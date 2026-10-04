@@ -7,13 +7,14 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge, LevelBadge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/misc";
 import { money } from "@/components/patterns/booking-status";
-import { formatInZone, minutesToHHMM, DAY_SHORT } from "@/lib/time";
+import { DAY_SHORT, formatInZone, minutesToHHMM, shortDate } from "@/lib/time";
 import { programCategoryLabel } from "@/lib/catalog";
 import type { TrainerView } from "@/server/services/trainers";
 import type { LessonView } from "@/server/services/lessons";
 import type { ProgramView, ScheduleSlot } from "@/server/services/programs";
 import type { PurchaseView } from "@/server/services/packages";
 import type { ReactNode } from "react";
+import { count } from "@/lib/text";
 
 /* ------------------------------------------------------------------ Status badges */
 
@@ -73,7 +74,7 @@ export function TrainerCard({ trainer, levelLabels, href }: { trainer: TrainerVi
             ))}
           </div>
         </div>
-        <div className="flex shrink-0 gap-1">{trainer.levels.length ? trainer.levels.map((l) => <LevelBadge key={l} level={l} size="sm" label={levelLabels[l]} />) : <Badge size="sm">All levels</Badge>}</div>
+        <div className="flex shrink-0 gap-1">{trainer.levels.length ? trainer.levels.map((l) => <LevelBadge key={l} level={l} size="sm" label={levelLabels[l]} />) : <Badge size="sm">Any level</Badge>}</div>
       </div>
       <div className="mt-4 flex items-center justify-between border-t border-line/10 pt-3 text-body-sm">
         <span className="flex items-center gap-1 truncate text-fg-muted">
@@ -153,7 +154,7 @@ export function ProgramCard({ program, levelLabels, href, action }: { program: P
       {program.description && <p className="mt-3 line-clamp-2 text-body-sm text-fg-muted">{program.description}</p>}
       <div className="mt-4 flex items-center justify-between border-t border-line/10 pt-3 text-body-sm">
         <span className="flex items-center gap-1 text-fg-muted">
-          <CalendarDays size={14} /> {program.sessionsCount} sessions · {scheduleText(program.schedule)} · from {formatInZone(new Date(program.startsOn), "UTC", { day: "numeric", month: "short" })}
+          <CalendarDays size={14} /> {count(program.sessionsCount, "session")} · {scheduleText(program.schedule)} · from {formatInZone(new Date(program.startsOn), "UTC", { day: "numeric", month: "short" })}
         </span>
         {action ?? <span className="font-bold text-fg tabular">{money(program.priceCents, program.currency)}</span>}
       </div>
@@ -191,7 +192,7 @@ export function PurchaseCard({ purchase, className }: { purchase: PurchaseView; 
         <ProgressBar value={purchase.credits - purchase.creditsUsed} max={purchase.credits} tone={purchase.status === "ACTIVE" ? "volt" : "brand"} className="mt-2" />
         <div className={cn("mt-2 flex flex-wrap gap-x-3 text-caption", purchase.status === "ACTIVE" ? "text-white/80" : "text-fg-muted")}>
           <span>{purchase.creditsUsed} used</span>
-          <span>Expires {purchase.expiresAt.toISOString().slice(0, 10)}</span>
+          <span>Expires {shortDate(purchase.expiresAt)}</span>
           <span>{money(purchase.priceCents, purchase.currency)} · {purchase.payments[0]?.status === "PAID" ? "paid" : "pay at venue"}</span>
         </div>
         {void pct}
@@ -207,7 +208,7 @@ export function TrainerMeta({ trainer }: { trainer: TrainerView }) {
         <Star size={16} className="text-blue-300" /> <span className="text-fg-muted">Experience</span>
         <span className="ml-auto font-semibold">
           {trainer.yearsExperience ? `${trainer.yearsExperience} years · ` : ""}
-          {trainer._count.lessons} lessons given
+          {count(trainer._count.lessons, "lesson")} given
         </span>
       </li>
       <li className="flex items-center gap-3 py-2.5">

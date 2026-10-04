@@ -5,6 +5,8 @@ import { listManagedLocations } from "@/server/services/locations";
 import { getLevelDefinitions } from "@/server/services/levels";
 import { TrainersAdmin } from "./trainers-admin";
 
+export const metadata = { title: "Coaches" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminTrainersPage() {

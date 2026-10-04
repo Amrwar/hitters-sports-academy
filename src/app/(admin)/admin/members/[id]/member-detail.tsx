@@ -25,6 +25,7 @@ import type { UserSummary } from "@/server/services/users";
 import type { PlayerHistory, ProfileView } from "@/server/services/profiles";
 import type { AssessmentOverview, AssessmentView } from "@/server/services/assessments";
 import { createAssessmentAction, recordLevelChangeAction, recordTrainingAction } from "@/server/actions/assessments";
+import { label } from "@/lib/catalog";
 
 type Props = {
   user: UserSummary;
@@ -135,7 +136,7 @@ export function MemberDetail({ user, profile, history, assessments, overview, le
               <li className="flex items-center gap-3 py-2">
                 <Swords size={16} className="text-blue-300 light:text-blue-600" /> <span className="text-fg-muted">Prefers</span>{" "}
                 <span className="ml-auto text-right font-semibold">
-                  {MATCH_TYPES.find((m) => m.value === profile.matchType)?.label} · {profile.side.toLowerCase()} side
+                  {MATCH_TYPES.find((m) => m.value === profile.matchType)?.label} · {label("side", profile.side)}
                   {profile.selfLevel ? ` · self ${profile.selfLevel}` : ""}
                 </span>
               </li>
@@ -194,7 +195,7 @@ export function MemberDetail({ user, profile, history, assessments, overview, le
                           <div className="mt-1 flex flex-wrap gap-1">
                             {Object.entries(a.scores as Record<string, number>).map(([k, v]) => (
                               <Badge key={k} size="sm">
-                                {k} {v}
+                                {label("score", k)} {v}
                               </Badge>
                             ))}
                           </div>

@@ -4,6 +4,8 @@ import { listPublicLocations } from "@/server/services/locations";
 import { getBooking } from "@/server/services/bookings";
 import { BookingFlow } from "./booking-flow";
 
+export const metadata = { title: "Book a court" };
+
 export const dynamic = "force-dynamic";
 
 export default async function BookPage({ searchParams }: { searchParams: Promise<{ location?: string; reschedule?: string }> }) {

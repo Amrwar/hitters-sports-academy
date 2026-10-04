@@ -6,6 +6,8 @@ import { getBooking } from "@/server/services/bookings";
 import { db } from "@/lib/db";
 import { AdminBookingDetail } from "./admin-booking-detail";
 
+export const metadata = { title: "Booking" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminBookingPage({ params }: { params: Promise<{ id: string }> }) {

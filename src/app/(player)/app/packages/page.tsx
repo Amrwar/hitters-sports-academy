@@ -2,6 +2,8 @@ import { requireActorOrRedirect } from "@/lib/auth/cookies";
 import { listMyPurchases, listPackages } from "@/server/services/packages";
 import { PackagesView } from "./packages-view";
 
+export const metadata = { title: "Packages" };
+
 export const dynamic = "force-dynamic";
 
 export default async function PackagesPage() {

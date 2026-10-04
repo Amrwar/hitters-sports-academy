@@ -328,7 +328,7 @@ export default function DesignSystemPage() {
               <StatTile label="Win rate" value="60%" delta={{ value: "-2 pts", positive: false }} />
               <StatTile label="Rating" value="4.8" tone="brand" />
             </div>
-            <ProgressBar value={5} max={8} label="Enrolment" />
+            <ProgressBar value={5} max={8} label="Enrollment" />
           </Card>
         </Section>
 
@@ -340,8 +340,8 @@ export default function DesignSystemPage() {
             <Alert tone="success" title="Booking confirmed">
               Court 2 · Today 19:00.
             </Alert>
-            <Alert tone="warning" title="1 spot left" action={<Button size="sm" variant="secondary">Enrol now</Button>}>
-              Enrolment closes when the group is full.
+            <Alert tone="warning" title="1 spot left" action={<Button size="sm" variant="secondary">Enroll now</Button>}>
+              Enrollment closes when the group is full.
             </Alert>
             <Alert tone="danger" title="Payment failed">
               Your card was declined. Try another method.

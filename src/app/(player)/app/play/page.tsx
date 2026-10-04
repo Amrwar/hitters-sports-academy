@@ -6,6 +6,8 @@ import { getMyProfile } from "@/server/services/profiles";
 import { getLevelDefinitions } from "@/server/services/levels";
 import { PlayView } from "./play-view";
 
+export const metadata = { title: "Play" };
+
 export const dynamic = "force-dynamic";
 
 export default async function PlayPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {

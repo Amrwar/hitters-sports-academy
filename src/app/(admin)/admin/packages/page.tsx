@@ -6,6 +6,8 @@ import { listManagedLocations } from "@/server/services/locations";
 import { listUsers } from "@/server/services/users";
 import { PackagesAdmin } from "./packages-admin";
 
+export const metadata = { title: "Packages" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminPackagesPage() {

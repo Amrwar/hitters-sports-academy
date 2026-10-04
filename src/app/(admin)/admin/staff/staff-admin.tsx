@@ -46,7 +46,7 @@ export function StaffAdmin({ memberships, locations, users, canGrant }: Props) {
   return (
     <AdminShell title="Staff" breadcrumb={["People", "Staff"]} actions={canGrant ? <Button leftIcon={<UserPlus />} onClick={() => setOpen(true)}>Grant role</Button> : undefined}>
       {!me.isGlobal && (
-        <Alert tone="info" className="mb-4" title="Location-scoped">
+        <Alert tone="info" className="mb-4" title="Roles apply per club">
           You see and manage staff at your own locations. Only academy owners appoint location managers.
         </Alert>
       )}
@@ -69,7 +69,7 @@ export function StaffAdmin({ memberships, locations, users, canGrant }: Props) {
               {memberships.map((m) => {
                 const canRevoke = canGrant && m.user.id !== me.id && (me.isGlobal || MANAGER_GRANTABLE_ROLES.includes(m.role));
                 return (
-                  <TR key={m.id} interactive>
+                  <TR key={m.id}>
                     <TD>
                       <div className="flex items-center gap-3">
                         <Avatar name={m.user.name} size="sm" />

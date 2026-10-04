@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/ui/states";
 import { TBody, TD, TH, THead, TR, Table, TableWrap } from "@/components/ui/table";
 import { BookingStatusBadge, PaymentStatusBadge, money } from "@/components/patterns/booking-status";
 import { formatInZone } from "@/lib/time";
+import { count, verbS } from "@/lib/text";
 import type { BookingView } from "@/server/services/bookings";
 
 type Props = {
@@ -38,12 +39,12 @@ export function DashboardView({ today, stats, locations }: Props) {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile size="lg" label="Bookings today" value={stats.bookingsToday} icon={<CalendarDays />} />
         <StatTile size="lg" label="Occupancy today" value={`${stats.occupancy}%`} icon={<Percent />} delta={{ value: "of available hours" }} />
-        <StatTile size="lg" label="Court revenue MTD" value={money(stats.revenueMtdCents)} icon={<Wallet />} tone="brand" delta={{ value: `${stats.bookingsMtd} bookings` }} />
+        <StatTile size="lg" label="Court revenue this month" value={money(stats.revenueMtdCents)} icon={<Wallet />} tone="brand" delta={{ value: count(stats.bookingsMtd, "booking") }} />
         <StatTile size="lg" label="Active members" value={stats.members.toLocaleString("en")} icon={<Users />} delta={stats.unverified ? { value: `${stats.unverified} unverified`, positive: false } : undefined} />
       </div>
 
       {stats.unverified > 0 && (
-        <Alert tone="info" className="mt-5" title={`${stats.unverified} member${stats.unverified === 1 ? "" : "s"} still need to verify their email`}>
+        <Alert tone="info" className="mt-5" title={`${count(stats.unverified, "member")} still ${verbS(stats.unverified, "need")} to verify their email`}>
           Unverified members can browse but cannot reserve courts.
         </Alert>
       )}
@@ -55,7 +56,7 @@ export function DashboardView({ today, stats, locations }: Props) {
             {hours.map((h) => {
               const v = byHour.get(h) ?? 0;
               return (
-                <div key={h} className="group flex h-full flex-1 flex-col items-center gap-1.5" title={`${String(h).padStart(2, "0")}:00 · ${v} booking${v === 1 ? "" : "s"}`}>
+                <div key={h} className="group flex h-full flex-1 flex-col items-center gap-1.5" title={`${String(h).padStart(2, "0")}:00 · ${count(v, "booking")}`}>
                   <div className="relative w-full flex-1 overflow-hidden rounded-t-xs bg-brand/10">
                     <div className={`absolute inset-x-0 bottom-0 rounded-t-xs transition-all ${v === maxHour && v > 0 ? "bg-brand-gradient shadow-glow-sm" : "bg-brand/60"}`} style={{ height: `${(v / maxHour) * 100}%` }} />
                   </div>
@@ -67,7 +68,7 @@ export function DashboardView({ today, stats, locations }: Props) {
         </Card>
 
         <Card>
-          <CardHeader title="Locations today" description="Non-cancelled bookings" />
+          <CardHeader title="Locations today" description="Excludes cancelled bookings" />
           <ul className="space-y-4">
             {byLocation.map((l) => {
               const pct = l.activeCourts ? Math.min(100, Math.round((l.count / (l.activeCourts * 17)) * 100)) : 0;
@@ -76,7 +77,7 @@ export function DashboardView({ today, stats, locations }: Props) {
                   <div className="mb-1.5 flex items-center justify-between text-body-sm">
                     <span className="font-semibold">{l.name.replace("HITTERS ", "")}</span>
                     <span className="tabular text-fg-muted">
-                      {l.count} bookings · {l.activeCourts}/{l.courts} courts
+                      {count(l.count, "booking")} · {l.activeCourts}/{l.courts} courts
                     </span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-line/10">
@@ -85,7 +86,7 @@ export function DashboardView({ today, stats, locations }: Props) {
                 </li>
               );
             })}
-            {byLocation.length === 0 && <li className="text-body-sm text-fg-muted">No locations in your scope.</li>}
+            {byLocation.length === 0 && <li className="text-body-sm text-fg-muted">No clubs assigned to you yet.</li>}
           </ul>
         </Card>
       </div>
@@ -94,7 +95,7 @@ export function DashboardView({ today, stats, locations }: Props) {
         <CardHeader title="Today's bookings" className="px-5 pt-5" action={<Button variant="link" size="sm" href="/admin/bookings">View all</Button>} />
         {today.length === 0 ? (
           <div className="px-5 pb-5">
-            <EmptyState compact icon={<CalendarDays />} title="No bookings today" description="New reservations appear here as they come in." action={<Button href="/admin/bookings">Create a booking</Button>} />
+            <EmptyState compact icon={<CalendarDays />} title="No bookings today" description="New reservations appear here as they come in." action={<Button href="/admin/bookings">Open bookings</Button>} />
           </div>
         ) : (
           <TableWrap className="rounded-none border-0 border-t">

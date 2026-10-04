@@ -7,6 +7,8 @@ import { listLocationBookings } from "@/server/services/bookings";
 import { listUsers } from "@/server/services/users";
 import { BookingsAdmin } from "./bookings-admin";
 
+export const metadata = { title: "Bookings" };
+
 export const dynamic = "force-dynamic";
 
 export default async function AdminBookingsPage({ searchParams }: { searchParams: Promise<{ location?: string; date?: string; status?: string; q?: string; all?: string }> }) {

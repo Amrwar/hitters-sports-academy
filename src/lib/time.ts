@@ -116,3 +116,20 @@ export function formatInZone(at: Date, tz: string, opts: Intl.DateTimeFormatOpti
 
 export const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 export const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+/* ------------------------------------------------------------------ Human dates */
+
+/** The one locale the product formats dates in, so two screens never disagree. */
+export const LOCALE = "en-GB";
+
+/** "Sat 11 Oct" from a Date. */
+export const shortDate = (at: Date | string): string => new Date(at).toLocaleDateString(LOCALE, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+
+/** "Saturday 11 October" from a YYYY-MM-DD string, for confirmation dialogs. */
+export function longDate(dateISO: string): string {
+  const { year, month, day } = parseDateISO(dateISO);
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString(LOCALE, { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+}
+
+/** "11 Apr 2027", for expiry dates where the weekday adds nothing. */
+export const plainDate = (at: Date | string): string => new Date(at).toLocaleDateString(LOCALE, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
