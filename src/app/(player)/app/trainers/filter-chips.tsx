@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import type { PlayerLevel } from "@prisma/client";
-import { Chip } from "@/components/ui/misc";
+import { Chip, ChipRow } from "@/components/ui/misc";
 import { LEVELS } from "@/lib/tokens";
 
 export function FilterChips({ locations, selectedLocation, selectedLevel, myLevel }: { locations: { id: string; name: string }[]; selectedLocation: string | null; selectedLevel: PlayerLevel | null; myLevel: PlayerLevel | null }) {
@@ -15,7 +15,7 @@ export function FilterChips({ locations, selectedLocation, selectedLevel, myLeve
   };
   return (
     <div className="space-y-2">
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 no-scrollbar">
+      <ChipRow>
         <Chip selected={!selectedLocation} onClick={() => go(null, selectedLevel)}>
           All clubs
         </Chip>
@@ -24,8 +24,8 @@ export function FilterChips({ locations, selectedLocation, selectedLevel, myLeve
             {l.name}
           </Chip>
         ))}
-      </div>
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 no-scrollbar">
+      </ChipRow>
+      <ChipRow>
         {myLevel && (
           <Chip selected={selectedLevel === myLevel} onClick={() => go(selectedLocation, selectedLevel === myLevel ? null : myLevel)}>
             Coaches my level
@@ -36,7 +36,7 @@ export function FilterChips({ locations, selectedLocation, selectedLevel, myLeve
             Level {l}
           </Chip>
         ))}
-      </div>
+      </ChipRow>
     </div>
   );
 }

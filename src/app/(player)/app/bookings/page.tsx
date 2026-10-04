@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CalendarPlus, CalendarX } from "lucide-react";
 import { PageHeader } from "@/components/nav/player-nav";
 import { Button } from "@/components/ui/button";
@@ -28,9 +29,20 @@ export default async function MyBookingsPage({ searchParams }: { searchParams: P
         )
       ) : (
         <div className="space-y-2.5">
-          {items.map((b) => (
-            <BookingRow key={b.id} booking={b} href={`/app/bookings/${b.id}`} />
+          {items.map((b, i) => (
+            <BookingRow key={b.id} booking={b} href={`/app/bookings/${b.id}`} featured={current === "upcoming" && i === 0} />
           ))}
+          {current === "upcoming" && (
+            <Link
+              href="/app/book"
+              className="flex items-center gap-3 rounded-lg border border-dashed border-line/15 px-4 py-4 text-body-sm text-fg-muted transition-colors hover:border-blue-400/40 hover:text-fg"
+            >
+              <span className="flex size-9 items-center justify-center rounded-md bg-blue-500/10 text-blue-300 ring-1 ring-inset ring-blue-400/20 [&_svg]:size-4">
+                <CalendarPlus />
+              </span>
+              Book another court
+            </Link>
+          )}
         </div>
       )}
     </div>

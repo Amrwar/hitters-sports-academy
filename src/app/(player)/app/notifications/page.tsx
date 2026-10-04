@@ -63,7 +63,8 @@ export default async function NotificationsPage({ searchParams }: { searchParams
         }
       />
 
-      <nav aria-label="Filter by category" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+      <nav aria-label="Filter by category" className="-mx-4 overflow-x-auto px-4 pb-1 no-scrollbar [mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)]">
+        <div className="flex w-max gap-2 pr-6">
         {tabs.map((t) => {
           const active = t.value === category;
           return (
@@ -79,6 +80,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
             </Link>
           );
         })}
+        </div>
       </nav>
 
       {rows.length === 0 && (

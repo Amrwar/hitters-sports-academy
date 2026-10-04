@@ -130,3 +130,26 @@ export function Divider({ label, className }: { label?: string; className?: stri
     </div>
   );
 }
+
+/* ---------------------------------------------------------------- Chip row */
+
+/**
+ * A horizontally scrollable row of chips that bleeds to the screen edge.
+ *
+ * The fade on the right edge is what tells people the row continues; without it a chip clipped by the
+ * viewport reads as a layout bug. The mask sits in the last 2.5rem, so a row that does not overflow ends
+ * before the fade and is unaffected.
+ */
+export function ChipRow({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "-mx-4 overflow-x-auto px-4 no-scrollbar",
+        "[mask-image:linear-gradient(to_right,black_calc(100%-2.5rem),transparent)]",
+        className,
+      )}
+    >
+      <div className="flex w-max gap-2 pr-6">{children}</div>
+    </div>
+  );
+}

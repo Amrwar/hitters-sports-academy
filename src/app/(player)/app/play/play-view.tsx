@@ -112,10 +112,14 @@ export function PlayView({ viewerId, viewerLevel, levelLabels, initialTab, mine,
             {recommended.length ? (
               <div className="space-y-3">
                 {recommended.map(({ game, match }) => (
-                  <div key={game.id} className="space-y-2">
-                    <GameCard game={game} viewerId={viewerId} href={`/app/play/${game.code}`} action={<MatchStrength score={match.score} />} />
-                    <MatchReasons reasons={match.reasons} compact className="px-1" />
-                  </div>
+                  <GameCard
+                    key={game.id}
+                    game={game}
+                    viewerId={viewerId}
+                    href={`/app/play/${game.code}`}
+                    action={<MatchStrength score={match.score} />}
+                    footer={<MatchReasons reasons={match.reasons} compact />}
+                  />
                 ))}
               </div>
             ) : (

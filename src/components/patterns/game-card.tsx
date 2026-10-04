@@ -46,7 +46,7 @@ export function costLabel(g: GameView): string {
 }
 
 /** Shared game summary for Play, Home and admin lists. */
-export function GameCard({ game, viewerId, action, href, showStatus = true }: { game: GameView; viewerId?: string; action?: ReactNode; href?: string; showStatus?: boolean }) {
+export function GameCard({ game, viewerId, action, href, showStatus = true, footer }: { game: GameView; viewerId?: string; action?: ReactNode; href?: string; showStatus?: boolean; /** Rendered inside the card under the lineup row, so anything explaining the game stays attached to it. */ footer?: ReactNode }) {
   const live = game.status === "IN_PROGRESS";
   const names = game.participants.filter((p) => p.status === "ACCEPTED").map((p) => p.user.name);
   const me = viewerId ? game.participants.find((p) => p.userId === viewerId) : null;
@@ -54,35 +54,29 @@ export function GameCard({ game, viewerId, action, href, showStatus = true }: { 
     <Card variant={live ? "brand" : href ? "interactive" : "default"} padding="md">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
+          {/* Only the two chips that change what the reader does: the game's state, and whether they are
+              invited to it. Format, match type and visibility are facts, so they read as text below. */}
           <div className="flex flex-wrap items-center gap-1.5">
             {showStatus && <GameStatusBadge status={game.status} size="sm" className={live ? "bg-white/15 text-white ring-0" : ""} />}
-            <Badge size="sm" className={live ? "bg-white/15 text-white" : "bg-line/10 text-fg-muted"}>
-              {gameFormatLabel(game.format)}
-            </Badge>
-            {game.matchType !== "ANY" && (
-              <Badge size="sm" tone={live ? "neutral" : "info"} className={live ? "bg-white/15 text-white" : ""}>
-                {game.matchType === "FRIENDLY" ? "Friendly" : "Competitive"}
-              </Badge>
-            )}
             {me?.status === "INVITED" && (
               <Badge size="sm" tone="volt">
                 Invited
               </Badge>
             )}
-            {game.visibility === "PUBLIC" && !live && (
-              <Badge size="sm" className="bg-line/10 text-fg-subtle">
-                Discoverable
-              </Badge>
-            )}
           </div>
           <h3 className="mt-2 truncate text-h4">{game.description?.trim() || `${game.organizer.name.split(" ")[0]}'s ${gameFormatLabel(game.format).toLowerCase()}`}</h3>
-          <div className={cn("mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-body-sm", live ? "text-white/80" : "text-fg-muted")}>
-            <span className="flex items-center gap-1">
-              <Clock size={14} /> {formatInZone(new Date(game.startsAt), game.location.timezone)}
+          <div className={cn("mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-body-sm", live ? "text-white/80" : "text-fg-muted")}>
+            <span className={cn("flex items-center gap-1.5 font-semibold", live ? "text-white" : "text-fg")}>
+              <Clock size={14} className={live ? "text-white/70" : "text-blue-300"} /> {formatInZone(new Date(game.startsAt), game.location.timezone)}
             </span>
-            <span className="flex items-center gap-1">
-              <MapPin size={14} /> {game.location.name.replace("HITTERS ", "")} · {game.court.name}
+            <span className="flex items-center gap-1.5">
+              <MapPin size={14} className={live ? "text-white/70" : "text-fg-subtle"} /> {game.location.name.replace("HITTERS ", "")} · {game.court.name}
             </span>
+          </div>
+          <div className={cn("mt-1 text-caption", live ? "text-white/70" : "text-fg-subtle")}>
+            {[gameFormatLabel(game.format), game.matchType !== "ANY" ? (game.matchType === "FRIENDLY" ? "Friendly" : "Competitive") : null, game.visibility === "PUBLIC" ? "Open to requests" : "Private"]
+              .filter(Boolean)
+              .join(" · ")}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -98,6 +92,7 @@ export function GameCard({ game, viewerId, action, href, showStatus = true }: { 
         </div>
         {action ?? <span className={cn("text-body-sm font-bold tabular", live ? "text-white" : "text-fg")}>{costLabel(game)}</span>}
       </div>
+      {footer && <div className={cn("mt-3 border-t pt-3", live ? "border-white/15" : "border-line/10")}>{footer}</div>}
     </Card>
   );
   return href ? (
