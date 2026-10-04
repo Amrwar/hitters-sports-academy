@@ -105,3 +105,95 @@ Constraints: unique email/phone, unique (location, court name), unique (user, lo
 - `Program` (categories beginner … group coaching): description, level requirement, age range, trainer, club, dates, weekly `schedule`, session count, capacity, price, waitlist flag, enrollment close, cancellation cutoff and rule texts. `createProgram` generates dated `ProgramSession`s from the schedule. Status DRAFT → OPEN → FULL → IN_PROGRESS → COMPLETED, or CANCELLED (refunds and notifies). `enroll` checks status, close date, level and age, then reserves a place under a row lock or waitlists in order; cancelling promotes the next waitlisted player. Attendance per session (PRESENT / LATE / ABSENT / EXCUSED) by the trainer or staff; PRESENT and LATE add a `TrainingRecord` once.
 - `TrainingPackage` (catalogue: credits, price, validity, optional trainer and club) and `PackagePurchase` (player's credits, used, left, expiry, ACTIVE / EXHAUSTED / EXPIRED / CANCELLED). Players buy catalogue packages (`package.purchase.own`, pay at venue); staff with `package.manage` sell catalogue or custom packages. `Payment` is now polymorphic (booking, lesson, enrollment or purchase) and `recordAcademyPayment` records venue payments for all three. No online processing is wired, consistent with bookings.
 - UI: player `/app/trainers` (+ profile and booking), `/app/lessons` (+ detail with reschedule/cancel and shared notes), `/app/programs` (+ detail with enroll, waitlist, schedule and attendance), `/app/packages`; trainer workspace `/admin/coaching` (calendar with requests and attendance, availability and time off, students with notes, programs with attendance, history, club lessons for staff); admin `/admin/trainers`, `/admin/programs` (roster, waitlist, enroll member, payments), `/admin/packages` (catalogue, sales, payments).
+
+## Phase 10 — Notifications and group messaging
+
+Everything HITTERS tells a person now goes through one path, and the people in a lineup can talk to each
+other without swapping phone numbers.
+
+### The catalogue is the source of truth
+
+`src/lib/notifications.ts` holds one entry per notification type: its category, default title and body, the
+channels it may use, whether the centre collapses it, and the quiet window that stops a repeat. Wording uses
+`{{placeholders}}` filled from the notification's `data`, and `render()` tidies the spacing and separators a
+missing value leaves behind, so a player never sees a brace or a dangling `·`.
+
+Adding a notification means adding a catalogue entry and calling `notify(userId, { type, data, url })`. The
+type is the contract; nothing else in the app writes a title or a body.
+
+### One function sends everything
+
+`notify()` in `src/server/services/notifications.ts`:
+
+1. resolves the admin template for the type, falling back to the catalogue, and stops if it is disabled
+2. renders the title and body
+3. narrows the type's channels by that person's per-category preferences, and stops if nothing is left
+4. checks the dedupe key against the type's quiet window, and returns the earlier notification instead of a
+   second one
+5. writes the `Notification` plus one `NotificationDelivery` per channel: `IN_APP` is `SENT` immediately,
+   the rest are `PENDING`
+6. hands the live channels to their sender, outside any caller transaction
+
+`notifyMany()` is the same thing for a list of people, and `{ dispatch: false }` queues without sending.
+
+### Channels are an abstraction, not a promise
+
+`registerChannelSender(channel, sender)` is the whole integration surface for email, push, SMS or WhatsApp.
+Until a provider is registered its delivery rows sit `PENDING`, which means nothing is lost when a channel is
+switched on later: `dispatchPendingDeliveries()` walks the backlog. A delivery is claimed (`PENDING` →
+`SENDING`) before the provider is called, so the inline dispatch and a cron pass can never send the same
+message twice; a claim that never finished is retried after ten minutes.
+
+### Not spamming people
+
+Four mechanisms, each doing one job:
+
+- **Preferences** per category per channel (`NotificationPreference`), defaulting to in-app and email on.
+- **Quiet windows** per type, keyed on `dedupeKey`, which defaults to `type:groupKey`. A lineup that changes
+  three times in a minute produces one notification.
+- **Grouping** in the centre: a groupable type collapses by `groupKey`, so five join requests for one game
+  are one row showing "5 updates", and tapping it marks all five read.
+- **Templates** an admin can disable outright, which turns the type off for everyone.
+
+### Reminders and event triggers
+
+`src/server/services/reminders.ts` sends what nobody clicks: booking reminders, lesson reminders for both
+sides, and program session reminders, for anything starting in the next 24 hours. Each one dedupes on the id
+of the thing it is about, so the job is safe to run as often as you like. `/api/cron/reminders` is the entry
+point, guarded by `CRON_SECRET` and scheduled hourly in `vercel.json`; it also advances elapsed games and
+programs.
+
+Event triggers added in this phase: a court closure warns the players holding a booking under it; publishing
+a game (or a spot reopening) tells the players it actually fits via `announceCompatibleGame()`, which runs the
+same deterministic matching engine in reverse and only interrupts people on a strong match; a program edit
+tells the enrolled players what changed; a waitlisted request that becomes pending again tells the requester
+their new position.
+
+### Group messaging
+
+One `MessageThread` per game and per program, created on the first post. Membership is derived, never stored:
+a game thread is the organizer plus the accepted participants, a program thread is the coach plus the enrolled
+players. `ThreadMember` carries a name, a photo and a level and nothing else, which is how players reach each
+other without a phone number being exposed anywhere in the payload.
+
+A new message notifies the other members with a fifteen-minute quiet window keyed to the thread, so a busy
+chat is one notification rather than thirty.
+
+### Moderation
+
+Any member can report a message once (`@@unique([messageId, reporterId])`), which notifies the managers and
+reception at that club. A moderator dismisses it, actions it, or actions it and removes the message; removal
+is a soft delete so the report and the audit trail keep pointing at something real, and the sender is told.
+A whole thread can be locked, which leaves it readable and stops every post. Staff with `message.moderate`
+can read a thread they are not in; they cannot post in it.
+
+### Permissions added
+
+`notification.configure` (global), `announcement.send`, `message.participate`, `message.moderate`. An
+announcement is scoped to the sender's locations; only an academy-wide role may message everyone.
+
+### Screens
+
+Player: the notification centre with category filters and grouped rows, notification preferences, a messages
+list, and the chat embedded in the game and program pages. Admin: notification templates with a live preview
+and placeholder validation, the announcement composer, delivery health per channel, and the moderation queue.

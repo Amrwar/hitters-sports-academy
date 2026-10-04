@@ -7,7 +7,8 @@ import { accessibleLocationIds, can, requireActor, requirePermission, type Actor
 import { GAME_FORMATS } from "@/lib/catalog";
 import { formatInZone, utcToZoned } from "@/lib/time";
 import { cancelGameSchema, createGameSessionSchema, fieldErrors, gameDiscoverSchema, gameListSchema, inviteToGameSchema, updateGameSessionSchema } from "@/lib/validation/schemas";
-import { notify } from "./notifications";
+import { notify, notifyMany } from "./notifications";
+import { plural, suffix } from "@/lib/notifications";
 import { requireActivePair } from "./pairs";
 
 /* ------------------------------------------------------------------ Shared select and view */
@@ -138,8 +139,16 @@ function label(s: GameStatus) {
   return s.toLowerCase().replace("_", " ");
 }
 
-function when(g: GameView) {
-  return `${formatInZone(g.startsAt, g.location.timezone)} · ${g.location.name} · ${g.court.name}`;
+/** The placeholder values every game notification shares. */
+function whenData(g: GameView) {
+  return { when: formatInZone(g.startsAt, g.location.timezone), club: g.location.name, court: g.court.name };
+}
+
+/** Tells waitlisted requesters they are pending again, once the transaction that promoted them has committed. */
+async function announcePromotions(g: GameView, promoted: WaitlistPromotion[]): Promise<void> {
+  await Promise.all(
+    promoted.map((p) => notify(p.userId, { type: "game.waitlist_moved", url: `/app/play/${g.code}`, groupKey: g.id, data: { position: p.position, code: g.code, ...whenData(g) } })),
+  );
 }
 
 /** Status after the lineup changes. DRAFT and terminal states are never touched here. */
@@ -210,7 +219,7 @@ export async function createGameSession(actor: Actor | null, input: unknown, opt
     await audit({ actorId: a.id, action: "game.created", entityType: "GameSession", entityId: g.id, locationId: g.locationId, metadata: { code, bookingId, format: g.format, maxPlayers, invited: invitees.length } }, tx);
     return decorate(g);
   });
-  await Promise.all(invitees.map((userId) => notify(userId, { type: "game.invited", title: `${a.name} invited you to a game`, body: when(created), data: { gameId: created.id, code: created.code } })));
+  await notifyMany(invitees, { type: "game.invited", url: `/app/play/${created.code}`, groupKey: created.id, data: { organizer: a.name, ...whenData(created), code: created.code, gameId: created.id } });
   return created;
 }
 
@@ -325,7 +334,7 @@ export async function inviteToGame(actor: Actor | null, sessionId: string, input
     await audit({ actorId: a.id, action: "game.invited", entityType: "GameSession", entityId: g.id, locationId: g.locationId, metadata: { userIds: fresh } }, tx);
     return load(g.id, tx);
   });
-  await Promise.all(fresh.map((userId) => notify(userId, { type: "game.invited", title: `${a.name} invited you to a game`, body: when(g), data: { gameId: g.id, code: g.code } })));
+  await notifyMany(fresh, { type: "game.invited", url: `/app/play/${g.code}`, groupKey: g.id, data: { organizer: a.name, ...whenData(g), code: g.code, gameId: g.id } });
   return updated;
 }
 
@@ -347,7 +356,7 @@ export async function respondToInvite(actor: Actor | null, sessionId: string, re
       await audit({ actorId: a.id, action: "game.declined", entityType: "GameSession", entityId: g.id, locationId: g.locationId }, tx);
       return load(g.id, tx);
     });
-    await notify(g.organizerId, { type: "game.declined", title: `${a.name} can't make it`, body: when(g), data: { gameId: g.id, code: g.code } });
+    await notify(g.organizerId, { type: "game.declined", url: `/app/play/${g.code}`, groupKey: g.id, data: { player: a.name, ...whenData(g), code: g.code, gameId: g.id } });
     return updated;
   }
 
@@ -365,7 +374,10 @@ export async function respondToInvite(actor: Actor | null, sessionId: string, re
     },
     { isolationLevel: "ReadCommitted" },
   );
-  await notify(g.organizerId, { type: "game.accepted", title: `${a.name} is in`, body: `${updated.acceptedCount} of ${updated.maxPlayers} players · ${when(g)}`, data: { gameId: g.id, code: g.code } });
+  await notify(g.organizerId, { type: "game.accepted", url: `/app/play/${g.code}`, groupKey: g.id, data: { player: a.name, accepted: updated.acceptedCount, max: updated.maxPlayers, ...whenData(g), code: g.code, gameId: g.id } });
+  if (updated.status === "OPEN" && updated.spotsLeft === 1) {
+    await notify(g.organizerId, { type: "game.almost_full", url: `/app/play/${g.code}`, groupKey: g.id, data: { ...whenData(g), code: g.code, gameId: g.id } });
+  }
   return updated;
 }
 
@@ -377,7 +389,7 @@ export async function leaveGame(actor: Actor | null, sessionId: string, opts: { 
   if (!me || me.status !== "ACCEPTED") throw forbidden("You are not in this game.");
   if (me.role === "ORGANIZER") throw validation("The organizer cannot leave. Cancel the game instead.");
   requireStatus(g, ["DRAFT", "OPEN", "FULL", "CONFIRMED"], "left");
-  let promoted: string[] = [];
+  let promoted: WaitlistPromotion[] = [];
   const updated = await db.$transaction(async (tx) => {
     await tx.gameParticipant.update({ where: { id: me.id }, data: { status: "LEFT", respondedAt: opts.now ?? new Date() } });
     const next = fillStatus(g.status, g.acceptedCount - 1, g.maxPlayers);
@@ -386,7 +398,22 @@ export async function leaveGame(actor: Actor | null, sessionId: string, opts: { 
     promoted = await promoteWaitlist(tx, g.id);
     return load(g.id, tx);
   });
-  await notify(g.organizerId, { type: "game.left", title: `${a.name} left your game`, body: `${updated.spotsLeft} spot${updated.spotsLeft === 1 ? "" : "s"} open${promoted.length ? ` · ${promoted.length} waitlisted request${promoted.length === 1 ? "" : "s"} now pending` : ""} · ${when(g)}`, data: { gameId: g.id, code: g.code } });
+  await notify(g.organizerId, {
+    type: "game.left",
+    url: `/app/play/${g.code}`,
+    groupKey: g.id,
+    data: {
+      player: a.name,
+      spots: updated.spotsLeft,
+      spotsPlural: plural(updated.spotsLeft),
+      ...whenData(g),
+      waitlistSuffix: suffix(promoted.length ? `${promoted.length} waitlisted request${plural(promoted.length)} are pending again.` : ""),
+      code: g.code,
+      gameId: g.id,
+    },
+  });
+  await announcePromotions(g, promoted);
+  await suggestToCompatiblePlayers(updated);
   return updated;
 }
 
@@ -399,15 +426,18 @@ export async function removeParticipant(actor: Actor | null, sessionId: string, 
   if (target.role === "ORGANIZER") throw validation("The organizer cannot be removed.");
   requireStatus(g, ["DRAFT", "OPEN", "FULL", "CONFIRMED"], "changed");
   const wasAccepted = target.status === "ACCEPTED";
+  let promoted: WaitlistPromotion[] = [];
   const updated = await db.$transaction(async (tx) => {
     await tx.gameParticipant.update({ where: { id: target.id }, data: { status: "REMOVED", respondedAt: new Date() } });
     const next = wasAccepted ? fillStatus(g.status, g.acceptedCount - 1, g.maxPlayers) : g.status;
     if (next !== g.status) await tx.gameSession.update({ where: { id: g.id }, data: { status: next } });
     await audit({ actorId: a.id, action: wasAccepted ? "game.participant_removed" : "game.invite_withdrawn", entityType: "GameSession", entityId: g.id, locationId: g.locationId, metadata: { userId } }, tx);
-    if (wasAccepted) await promoteWaitlist(tx, g.id);
+    if (wasAccepted) promoted = await promoteWaitlist(tx, g.id);
     return load(g.id, tx);
   });
-  await notify(userId, { type: "game.removed", title: wasAccepted ? "You were removed from a game" : "An invitation was withdrawn", body: when(g), data: { gameId: g.id, code: g.code } });
+  await notify(userId, { type: "game.removed", url: `/app/play/${g.code}`, data: { headline: wasAccepted ? "You were removed from a game" : "An invitation was withdrawn", ...whenData(g), code: g.code, gameId: g.id } });
+  await announcePromotions(g, promoted);
+  await suggestToCompatiblePlayers(updated);
   return updated;
 }
 
@@ -429,15 +459,17 @@ export async function updateGameSession(actor: Actor | null, sessionId: string, 
   }
   const costMode = parsed.data.costMode ?? g.costMode;
   if (costMode !== "FIXED_PER_PLAYER") data.costPerPlayerCents = null;
+  let promoted: WaitlistPromotion[] = [];
   const updated = await db.$transaction(async (tx) => {
     await tx.gameSession.update({ where: { id: g.id }, data });
     const fresh = await load(g.id, tx);
     const next = fillStatus(fresh.status, fresh.acceptedCount, fresh.maxPlayers);
     if (next !== fresh.status) await tx.gameSession.update({ where: { id: g.id }, data: { status: next } });
     await audit({ actorId: a.id, action: "game.updated", entityType: "GameSession", entityId: g.id, locationId: g.locationId, metadata: { fields: Object.keys(parsed.data) } }, tx);
-    if (fresh.spotsLeft > 0) await promoteWaitlist(tx, g.id);
+    if (fresh.spotsLeft > 0) promoted = await promoteWaitlist(tx, g.id);
     return load(g.id, tx);
   });
+  await announcePromotions(updated, promoted);
   return updated;
 }
 
@@ -455,7 +487,22 @@ export async function publishGame(actor: Actor | null, sessionId: string, opts: 
     await audit({ actorId: a.id, action: "game.published", entityType: "GameSession", entityId: g.id, locationId: g.locationId, metadata: { status: next, visibility: g.visibility } }, tx);
     return load(g.id, tx);
   });
+  await suggestToCompatiblePlayers(updated);
   return updated;
+}
+
+/**
+ * Tells the players a newly open game actually suits that it exists. Imported lazily because the matchmaking
+ * engine reads this module, and it never blocks the organizer: a failure here is logged, not surfaced.
+ */
+async function suggestToCompatiblePlayers(g: GameView): Promise<void> {
+  if (g.visibility !== "PUBLIC" || g.status !== "OPEN" || !g.openToRequests) return;
+  try {
+    const { announceCompatibleGame } = await import("./matchmaking");
+    await announceCompatibleGame(g.id);
+  } catch (e) {
+    console.error("[game] suggesting a game to compatible players failed", e);
+  }
 }
 
 /** FULL → CONFIRMED: the organizer locks the lineup. Players are told the game is on. */
@@ -471,7 +518,7 @@ export async function confirmGame(actor: Actor | null, sessionId: string, opts: 
     return load(g.id, tx);
   });
   const others = g.participants.filter((p) => p.status === "ACCEPTED" && p.userId !== a.id).map((p) => p.userId);
-  await Promise.all(others.map((userId) => notify(userId, { type: "game.confirmed", title: "Game confirmed", body: when(g), data: { gameId: g.id, code: g.code } })));
+  await notifyMany(others, { type: "game.confirmed", url: `/app/play/${g.code}`, groupKey: g.id, data: { ...whenData(g), code: g.code, gameId: g.id } });
   return updated;
 }
 
@@ -493,7 +540,7 @@ export async function cancelGame(actor: Actor | null, sessionId: string, input: 
     return load(g.id, tx);
   });
   const others = [...new Set([...g.participants.filter((p) => ["ACCEPTED", "INVITED"].includes(p.status)).map((p) => p.userId), ...requesters])].filter((id) => id !== a.id);
-  await Promise.all(others.map((userId) => notify(userId, { type: "game.cancelled", title: "Game cancelled", body: parsed.data.reason ? `${when(g)} · ${parsed.data.reason}` : when(g), data: { gameId: g.id, code: g.code } })));
+  await notifyMany(others, { type: "game.cancelled", url: `/app/play/${g.code}`, groupKey: g.id, data: { ...whenData(g), reasonSuffix: suffix(parsed.data.reason), code: g.code, gameId: g.id } });
   return updated;
 }
 
@@ -548,17 +595,35 @@ export async function expireRequestsForGame(tx: Prisma.TransactionClient, gameId
   return [...new Set(open.flatMap((r) => [r.userId, ...(r.pair ? [r.pair.playerAId, r.pair.playerBId] : [])]))];
 }
 
+/** One requester who moved off the waitlist, with their place in the promoted queue. */
+export type WaitlistPromotion = { userId: string; position: number };
+
 /**
  * When spots reopen, waitlisted requests that now fit become PENDING again (oldest first). Nothing is accepted:
- * the organizer still decides. Returns the ids of the promoted requests.
+ * the organizer still decides. Returns the people to tell, oldest request first, so the caller can notify them
+ * once the transaction has committed.
  */
-export async function promoteWaitlist(tx: Prisma.TransactionClient, gameId: string): Promise<string[]> {
+export async function promoteWaitlist(tx: Prisma.TransactionClient, gameId: string): Promise<WaitlistPromotion[]> {
   const g = await load(gameId, tx);
   if (g.status !== "OPEN" || g.spotsLeft === 0) return [];
-  const waiting = await tx.gameJoinRequest.findMany({ where: { sessionId: gameId, status: "WAITLISTED" }, orderBy: { createdAt: "asc" }, select: { id: true, spots: true } });
-  const fit = waiting.filter((r) => r.spots <= g.spotsLeft).map((r) => r.id);
-  if (fit.length) await tx.gameJoinRequest.updateMany({ where: { id: { in: fit } }, data: { status: "PENDING" } });
-  return fit;
+  const waiting = await tx.gameJoinRequest.findMany({
+    where: { sessionId: gameId, status: "WAITLISTED" },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, spots: true, userId: true, pair: { select: { playerAId: true, playerBId: true } } },
+  });
+  const fit = waiting.filter((r) => r.spots <= g.spotsLeft);
+  if (fit.length === 0) return [];
+  await tx.gameJoinRequest.updateMany({ where: { id: { in: fit.map((r) => r.id) } }, data: { status: "PENDING" } });
+  const seen = new Set<string>();
+  const out: WaitlistPromotion[] = [];
+  fit.forEach((r, i) => {
+    for (const userId of [r.userId, ...(r.pair ? [r.pair.playerAId, r.pair.playerBId] : [])]) {
+      if (seen.has(userId)) continue;
+      seen.add(userId);
+      out.push({ userId, position: i + 1 });
+    }
+  });
+  return out;
 }
 
 /** Once a game fills, the remaining pending requests wait. Returns the requester ids to notify. */

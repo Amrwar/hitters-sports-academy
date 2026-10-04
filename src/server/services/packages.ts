@@ -6,6 +6,7 @@ import { AppError, forbidden, notFound, validation } from "@/lib/errors";
 import { accessibleLocationIds, can, requireActor, requirePermission, type Actor } from "@/lib/auth/authorize";
 import { fieldErrors, packagePurchaseSchema, packageSchema, recordPaymentSchema } from "@/lib/validation/schemas";
 import { notify } from "./notifications";
+import { plural } from "@/lib/notifications";
 
 /* ------------------------------------------------------------------ Catalogue */
 
@@ -137,7 +138,7 @@ export async function purchasePackage(actor: Actor | null, input: unknown, opts:
     await audit({ actorId: a.id, action: "package.purchased", entityType: "PackagePurchase", entityId: p.id, locationId, metadata: { code: c, playerId, credits, priceCents, custom } }, tx);
     return view(p);
   });
-  await notify(playerId, { type: "package.purchased", title: `${name}: ${credits} lesson credit${credits === 1 ? "" : "s"}`, body: `Valid until ${purchase.expiresAt.toISOString().slice(0, 10)}. Pay at the venue; use credits when booking a lesson.`, data: { purchaseId: purchase.id, code: purchase.code } });
+  await notify(playerId, { type: "package.purchased", url: "/app/packages", data: { package: name, credits, creditsPlural: plural(credits), expires: purchase.expiresAt.toISOString().slice(0, 10), purchaseId: purchase.id, code: purchase.code } });
   return purchase;
 }
 

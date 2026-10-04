@@ -4,10 +4,11 @@ import { db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { AppError, forbidden, notFound, validation } from "@/lib/errors";
 import { accessibleLocationIds, can, requireActor, requirePermission, type Actor } from "@/lib/auth/authorize";
-import { dayOfWeekISO, utcToZoned, zonedToUtc } from "@/lib/time";
+import { dayOfWeekISO, formatInZone, utcToZoned, zonedToUtc } from "@/lib/time";
 import { bookingListSchema, bookingRequestSchema, cancelBookingSchema, createBookingSchema, fieldErrors, recordPaymentSchema, type BookingRequest, type OpeningHours } from "@/lib/validation/schemas";
 import { quotePrice, type Quote } from "./pricing";
-import { notify } from "./notifications";
+import { notify, notifyMany } from "./notifications";
+import { suffix } from "@/lib/notifications";
 import { cancelGameForBooking, moveGameToBooking, type GameCascade } from "./game-sessions";
 
 /* ------------------------------------------------------------------ Shared selects */
@@ -241,7 +242,11 @@ export async function createBooking(actor: Actor | null, input: unknown, opts: {
     );
     if (booking.playerId) {
       const z = utcToZoned(booking.startsAt, slot.location.timezone);
-      await notify(booking.playerId, { type: "booking.confirmed", title: `Booking confirmed · ${booking.confirmationCode}`, body: `${slot.location.name} · ${slot.court.name} · ${z.dateISO} ${String(Math.floor(z.minutes / 60)).padStart(2, "0")}:${String(z.minutes % 60).padStart(2, "0")} for ${req.durationMinutes} min.`, data: { bookingId: booking.id } });
+      await notify(booking.playerId, {
+        type: "booking.confirmed",
+        url: `/app/bookings/${booking.id}`,
+        data: { code: booking.confirmationCode, club: slot.location.name, court: slot.court.name, when: `${z.dateISO} ${String(Math.floor(z.minutes / 60)).padStart(2, "0")}:${String(z.minutes % 60).padStart(2, "0")}`, duration: req.durationMinutes, bookingId: booking.id },
+      });
     }
     return booking;
   } catch (e) {
@@ -356,11 +361,20 @@ export async function cancelBooking(actor: Actor | null, bookingId: string, inpu
     return tx.booking.findUniqueOrThrow({ where: { id: bookingId }, select: bookingSelect });
   });
   if (booking.playerId && booking.playerId !== a.id) {
-    await notify(booking.playerId, { type: "booking.cancelled", title: `Booking ${booking.confirmationCode} cancelled`, body: parsed.data.reason ? `Reason: ${parsed.data.reason}` : `${booking.location.name} cancelled your booking.`, data: { bookingId } });
+    await notify(booking.playerId, {
+      type: "booking.cancelled",
+      url: `/app/bookings/${bookingId}`,
+      data: { code: booking.confirmationCode, club: booking.location.name, when: formatInZone(booking.startsAt, booking.location.timezone), reasonSuffix: suffix(parsed.data.reason ? `Reason: ${parsed.data.reason}` : ""), bookingId },
+    });
   }
   if (game) {
     const g: GameCascade = game;
-    await Promise.all(g.userIds.map((userId) => notify(userId, { type: "game.cancelled", title: "Game cancelled", body: `The court booking for ${g.code} at ${booking.location.name} was cancelled.`, data: { gameId: g.gameId, code: g.code } })));
+    await notifyMany(g.userIds, {
+      type: "game.cancelled",
+      url: `/app/play/${g.code}`,
+      groupKey: g.gameId,
+      data: { code: g.code, club: booking.location.name, when: formatInZone(booking.startsAt, booking.location.timezone), reasonSuffix: " The court booking was cancelled.", gameId: g.gameId },
+    });
   }
   return updated;
 }
@@ -421,11 +435,20 @@ export async function rescheduleBooking(actor: Actor | null, bookingId: string, 
       { isolationLevel: "ReadCommitted" },
     );
     if (created.playerId && created.playerId !== a.id) {
-      await notify(created.playerId, { type: "booking.rescheduled", title: `Booking moved · ${created.confirmationCode}`, body: `${created.location.name} moved your session to ${created.court.name}.`, data: { bookingId: created.id } });
+      await notify(created.playerId, {
+        type: "booking.rescheduled",
+        url: `/app/bookings/${created.id}`,
+        data: { code: created.confirmationCode, club: created.location.name, court: created.court.name, when: formatInZone(created.startsAt, created.location.timezone), bookingId: created.id },
+      });
     }
     if (movedGame) {
       const g: GameCascade = movedGame;
-      await Promise.all(g.userIds.map((userId) => notify(userId, { type: "game.moved", title: `Game ${g.code} moved`, body: `${created.location.name} · ${created.court.name} · ${utcToZoned(created.startsAt, created.location.timezone).dateISO}`, data: { gameId: g.gameId, code: g.code } })));
+      await notifyMany(g.userIds, {
+        type: "game.moved",
+        url: `/app/play/${g.code}`,
+        groupKey: g.gameId,
+        data: { code: g.code, club: created.location.name, court: created.court.name, when: formatInZone(created.startsAt, created.location.timezone), gameId: g.gameId },
+      });
     }
     return created;
   } catch (e) {

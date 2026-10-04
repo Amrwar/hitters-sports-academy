@@ -5,6 +5,7 @@ import { notFound, validation } from "@/lib/errors";
 import { requirePermission, type Actor } from "@/lib/auth/authorize";
 import { fieldErrors, trainingRecordSchema } from "@/lib/validation/schemas";
 import { notify } from "./notifications";
+import { suffix } from "@/lib/notifications";
 
 export const trainingSelect = {
   id: true,
@@ -35,7 +36,7 @@ export async function recordTraining(actor: Actor | null, input: unknown): Promi
     await audit({ actorId: a.id, action: "training.recorded", entityType: "TrainingRecord", entityId: r.id, locationId: parsed.data.locationId, metadata: { playerProfileId: profile.id, kind: r.kind, title: r.title } }, tx);
     return r;
   });
-  await notify(profile.userId, { type: "training.recorded", title: "Training added to your history", body: `${record.title} · ${record.location?.name ?? ""}${record.trainer ? ` with ${record.trainer.name}` : ""}.`, data: { trainingId: record.id } });
+  await notify(profile.userId, { type: "training.recorded", url: "/app/profile", data: { title: record.title, club: record.location?.name ?? "", coachSuffix: suffix(record.trainer ? `with ${record.trainer.name}` : ""), trainingId: record.id } });
   return record;
 }
 

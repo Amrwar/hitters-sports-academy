@@ -6,7 +6,7 @@ import { AppError, conflict, forbidden, notFound, validation } from "@/lib/error
 import { accessibleLocationIds, can, requireActor, requirePermission, type Actor } from "@/lib/auth/authorize";
 import { addDaysISO, dayOfWeekISO, formatInZone, zonedToUtc } from "@/lib/time";
 import { attendanceMarkSchema, enrollmentCancelSchema, fieldErrors, programSchema, programUpdateSchema } from "@/lib/validation/schemas";
-import { notify } from "./notifications";
+import { notify, notifyMany } from "./notifications";
 
 /* ------------------------------------------------------------------ Select */
 
@@ -100,7 +100,7 @@ export async function createProgram(actor: Actor | null, input: unknown): Promis
       select: programSelect,
     });
     await audit({ actorId: a.id, action: "program.created", entityType: "Program", entityId: p.id, locationId: data.locationId, metadata: { code: c, name: data.name, sessions: sessions.length } }, tx);
-    await notify(trainer.userId, { type: "program.assigned", title: `You lead "${data.name}"`, body: `${loc.name} · ${sessions.length} sessions from ${startsOn}.`, data: { programId: p.id, code: c } });
+    await notify(trainer.userId, { type: "program.assigned", url: `/admin/programs`, data: { program: data.name, club: loc.name, sessions: sessions.length, startsOn, programId: p.id, code: c } });
     return decorate(p, tx);
   });
 }
@@ -121,7 +121,7 @@ export async function updateProgram(actor: Actor | null, programId: string, inpu
   const count = data.sessionsCount ?? p.sessionsCount;
   const sessions = regenerate ? generateSessions(s0, e0, schedule, count, p.location.timezone) : [];
   if (regenerate && sessions.length < count) throw validation(`The schedule only fits ${sessions.length} of ${count} sessions between the dates.`, { sessionsCount: `Max ${sessions.length}` });
-  return db.$transaction(async (tx) => {
+  const updated = await db.$transaction(async (tx) => {
     await tx.program.update({ where: { id: p.id }, data: { ...data, ...(startsOn ? { startsOn: new Date(`${startsOn}T00:00:00Z`) } : {}), ...(endsOn ? { endsOn: new Date(`${endsOn}T00:00:00Z`) } : {}) } });
     if (regenerate) {
       await tx.programSession.deleteMany({ where: { programId: p.id } });
@@ -135,6 +135,35 @@ export async function updateProgram(actor: Actor | null, programId: string, inpu
     }
     await audit({ actorId: a.id, action: "program.updated", entityType: "Program", entityId: p.id, locationId: p.locationId, metadata: { fields: Object.keys(parsed.data), regenerated: regenerate } }, tx);
     return load(p.id, tx);
+  });
+  await announceProgramChange(updated, parsed.data, regenerate);
+  return updated;
+}
+
+/**
+ * Tells the people already enrolled what moved. Only changes a player would notice are worth a notification,
+ * so a rename of an internal field stays silent, and the type's quiet window collapses a burst of edits.
+ */
+async function announceProgramChange(p: ProgramView, fields: Record<string, unknown>, regenerated: boolean): Promise<void> {
+  const parts: string[] = [];
+  if (regenerated) parts.push("The schedule changed.");
+  if (fields.trainerId !== undefined) parts.push("A different coach is leading it.");
+  if (fields.courtId !== undefined && !regenerated) parts.push("The court changed.");
+  if (fields.priceCents !== undefined) parts.push("The price changed.");
+  if (fields.capacity !== undefined) parts.push("The number of places changed.");
+  if (fields.level !== undefined || fields.levels !== undefined) parts.push("The level requirement changed.");
+  if (parts.length === 0) return;
+  const rows = await db.programEnrollment.findMany({ where: { programId: p.id, status: "ENROLLED" }, select: { playerId: true } });
+  const players = rows.map((r) => r.playerId);
+  if (players.length === 0) return;
+  await notifyMany(players, {
+    type: "program.changed",
+    url: `/app/programs/${p.id}`,
+    groupKey: p.id,
+    data: { program: p.name, summary: parts.join(" "), programId: p.id, code: p.code },
+  }).catch((e) => {
+    console.error("[program] announcing a change failed", e);
+    return 0;
   });
 }
 
@@ -159,7 +188,7 @@ export async function setProgramStatus(actor: Actor | null, programId: string, s
     await audit({ actorId: a.id, action: `program.${status.toLowerCase()}`, entityType: "Program", entityId: p.id, locationId: p.locationId, metadata: { reason } }, tx);
     return load(p.id, tx);
   });
-  await Promise.all(affected.map((userId) => notify(userId, { type: "program.cancelled", title: `${p.name} was cancelled`, body: reason ?? "The club cancelled this program. Any payment is refunded.", data: { programId: p.id, code: p.code } })));
+  await notifyMany(affected, { type: "program.cancelled", url: "/app/programs", groupKey: p.id, data: { program: p.name, reason: reason ?? "The club cancelled this program. Any payment is refunded.", programId: p.id, code: p.code } });
   return updated;
 }
 
@@ -275,8 +304,17 @@ export async function enroll(actor: Actor | null, programId: string, opts: { pla
     { isolationLevel: "ReadCommitted" },
   );
   await Promise.all([
-    notify(playerId, { type: waitlisted ? "program.waitlisted" : "program.enrolled", title: waitlisted ? `Waitlisted for ${p0.name}` : `Enrolled in ${p0.name}`, body: waitlisted ? `You are number ${created.position} in line. We tell you when a spot opens.` : `${p0.location.name} · starts ${formatInZone(p0.startsOn, "UTC", { day: "numeric", month: "short" })} · pay at the venue.`, data: { programId: p0.id, code: p0.code } }),
-    notify(p0.trainer.userId, { type: "program.roster", title: `${player.name} ${waitlisted ? "joined the waitlist for" : "enrolled in"} ${p0.name}`, body: `${created.program.enrolledCount} of ${p0.capacity} places taken.`, data: { programId: p0.id, code: p0.code } }),
+    notify(playerId, {
+      type: waitlisted ? "program.waitlisted" : "program.enrolled",
+      url: `/app/programs/${p0.id}`,
+      data: { program: p0.name, club: p0.location.name, startsOn: formatInZone(p0.startsOn, "UTC", { day: "numeric", month: "short" }), position: created.position, programId: p0.id, code: p0.code },
+    }),
+    notify(p0.trainer.userId, {
+      type: "program.roster",
+      url: `/admin/programs`,
+      groupKey: p0.id,
+      data: { player: player.name, verb: waitlisted ? "joined the waitlist for" : "enrolled in", program: p0.name, enrolled: created.program.enrolledCount, capacity: p0.capacity, programId: p0.id, code: p0.code },
+    }),
   ]);
   return created;
 }
@@ -330,8 +368,8 @@ export async function cancelEnrollment(actor: Actor | null, enrollmentId: string
     return viewEnrollment(fresh, tx);
   });
   await Promise.all([
-    ...(e.playerId !== a.id ? [notify(e.playerId, { type: "program.enrollment_cancelled", title: `Removed from ${e.program.name}`, body: parsed.data.reason ?? "The club withdrew your place. Any payment is refunded.", data: { programId: e.programId } })] : []),
-    ...promoted.map((userId) => notify(userId, { type: "program.enrolled", title: `A place opened in ${e.program.name}`, body: "You moved off the waitlist and are enrolled. Pay at the venue.", data: { programId: e.programId, code: e.program.code } })),
+    ...(e.playerId !== a.id ? [notify(e.playerId, { type: "program.enrollment_cancelled", url: "/app/programs", data: { program: e.program.name, reason: parsed.data.reason ?? "The club withdrew your place. Any payment is refunded.", programId: e.programId } })] : []),
+    notifyMany(promoted, { type: "program.promoted", url: `/app/programs/${e.programId}`, groupKey: e.programId, data: { program: e.program.name, programId: e.programId, code: e.program.code } }),
   ]);
   return updated;
 }

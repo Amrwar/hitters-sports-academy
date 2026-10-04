@@ -178,8 +178,32 @@ enum NotificationChannel {
 
 enum NotificationStatus {
   PENDING
+  /// Claimed by a worker and handed to the provider; stops a second worker sending it again.
+  SENDING
   SENT
   FAILED
+  /// The user's preferences turned this channel off, so nothing was attempted.
+  SKIPPED
+}
+
+/// Groups notification types for preferences and for the notification centre's filters.
+enum NotificationCategory {
+  BOOKING
+  MATCHMAKING
+  TRAINING
+  ACADEMY
+  MESSAGING
+}
+
+enum MessageThreadKind {
+  GAME
+  PROGRAM
+}
+
+enum ReportStatus {
+  OPEN
+  ACTIONED
+  DISMISSED
 }
 
 // ---------------------------------------------------------------- Games (planned padel sessions)
@@ -342,41 +366,48 @@ model User {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
-  playerProfile       PlayerProfile?
-  sessions            Session[]
-  verificationTokens  VerificationToken[]
-  memberships         StaffMembership[]    @relation("MembershipUser")
-  createdMemberships  StaffMembership[]    @relation("MembershipCreatedBy")
-  assessmentsGiven    Assessment[]         @relation("AssessmentAssessor")
-  assessmentRequests  AssessmentRequest[]  @relation("RequestAssessor")
-  trainingGiven       TrainingRecord[]     @relation("TrainingTrainer")
-  trainingRecorded    TrainingRecord[]     @relation("TrainingCreatedBy")
-  notifications       Notification[]
-  auditLogs           AuditLog[]
-  bookings            Booking[]            @relation("BookingPlayer")
-  createdBookings     Booking[]            @relation("BookingCreatedBy")
-  cancelledBookings   Booking[]            @relation("BookingCancelledBy")
-  participations      BookingParticipant[]
-  organizedGames      GameSession[]        @relation("GameOrganizer")
-  cancelledGames      GameSession[]        @relation("GameCancelledBy")
-  gameParticipations  GameParticipant[]    @relation("GameParticipantUser")
-  gameInvitesSent     GameParticipant[]    @relation("GameParticipantInvitedBy")
-  gameRequests        GameJoinRequest[]    @relation("GameRequestUser")
-  gameRequestsDecided GameJoinRequest[]    @relation("GameRequestDecidedBy")
-  pairsAsA            Pair[]               @relation("PairPlayerA")
-  pairsAsB            Pair[]               @relation("PairPlayerB")
-  pairsCreated        Pair[]               @relation("PairCreatedBy")
-  trainerProfile      TrainerProfile?
-  lessonsTaken        Lesson[]             @relation("LessonPlayer")
-  lessonsCancelled    Lesson[]             @relation("LessonCancelledBy")
-  lessonsCreated      Lesson[]             @relation("LessonCreatedBy")
-  progressNotes       ProgressNote[]       @relation("NotePlayer")
-  enrollments         ProgramEnrollment[]  @relation("EnrollmentPlayer")
-  enrollmentsCreated  ProgramEnrollment[]  @relation("EnrollmentCreatedBy")
-  attendanceMarked    ProgramAttendance[]  @relation("AttendanceMarkedBy")
-  programsCreated     Program[]            @relation("ProgramCreatedBy")
-  purchases           PackagePurchase[]    @relation("PurchasePlayer")
-  purchasesCreated    PackagePurchase[]    @relation("PurchaseCreatedBy")
+  playerProfile           PlayerProfile?
+  sessions                Session[]
+  verificationTokens      VerificationToken[]
+  memberships             StaffMembership[]        @relation("MembershipUser")
+  createdMemberships      StaffMembership[]        @relation("MembershipCreatedBy")
+  assessmentsGiven        Assessment[]             @relation("AssessmentAssessor")
+  assessmentRequests      AssessmentRequest[]      @relation("RequestAssessor")
+  trainingGiven           TrainingRecord[]         @relation("TrainingTrainer")
+  trainingRecorded        TrainingRecord[]         @relation("TrainingCreatedBy")
+  notifications           Notification[]
+  auditLogs               AuditLog[]
+  bookings                Booking[]                @relation("BookingPlayer")
+  createdBookings         Booking[]                @relation("BookingCreatedBy")
+  cancelledBookings       Booking[]                @relation("BookingCancelledBy")
+  participations          BookingParticipant[]
+  organizedGames          GameSession[]            @relation("GameOrganizer")
+  cancelledGames          GameSession[]            @relation("GameCancelledBy")
+  gameParticipations      GameParticipant[]        @relation("GameParticipantUser")
+  gameInvitesSent         GameParticipant[]        @relation("GameParticipantInvitedBy")
+  gameRequests            GameJoinRequest[]        @relation("GameRequestUser")
+  gameRequestsDecided     GameJoinRequest[]        @relation("GameRequestDecidedBy")
+  pairsAsA                Pair[]                   @relation("PairPlayerA")
+  pairsAsB                Pair[]                   @relation("PairPlayerB")
+  pairsCreated            Pair[]                   @relation("PairCreatedBy")
+  trainerProfile          TrainerProfile?
+  lessonsTaken            Lesson[]                 @relation("LessonPlayer")
+  lessonsCancelled        Lesson[]                 @relation("LessonCancelledBy")
+  lessonsCreated          Lesson[]                 @relation("LessonCreatedBy")
+  progressNotes           ProgressNote[]           @relation("NotePlayer")
+  enrollments             ProgramEnrollment[]      @relation("EnrollmentPlayer")
+  enrollmentsCreated      ProgramEnrollment[]      @relation("EnrollmentCreatedBy")
+  attendanceMarked        ProgramAttendance[]      @relation("AttendanceMarkedBy")
+  programsCreated         Program[]                @relation("ProgramCreatedBy")
+  purchases               PackagePurchase[]        @relation("PurchasePlayer")
+  purchasesCreated        PackagePurchase[]        @relation("PurchaseCreatedBy")
+  notificationPreferences NotificationPreference[]
+  templatesUpdated        NotificationTemplate[]   @relation("TemplateUpdatedBy")
+  messagesSent            Message[]                @relation("MessageSender")
+  messagesDeleted         Message[]                @relation("MessageDeletedBy")
+  reportsMade             MessageReport[]          @relation("ReportReporter")
+  reportsReviewed         MessageReport[]          @relation("ReportReviewedBy")
+  threadsLocked           MessageThread[]          @relation("ThreadLockedBy")
 
   @@index([status])
   @@index([globalRole])
@@ -856,6 +887,7 @@ model GameSession {
   pair         Pair?             @relation("SessionPair", fields: [pairId], references: [id], onDelete: SetNull)
   participants GameParticipant[]
   requests     GameJoinRequest[]
+  thread       MessageThread?
 
   @@index([organizerId, startsAt(sort: Desc)])
   @@index([locationId, startsAt])
@@ -1130,6 +1162,7 @@ model Program {
   sessions    ProgramSession[]
   enrollments ProgramEnrollment[]
   notes       ProgressNote[]
+  thread      MessageThread?
 
   @@index([locationId, startsOn])
   @@index([status, startsOn])
@@ -1282,23 +1315,146 @@ model StaffMembership {
 // ---------------------------------------------------------------- Messaging & audit
 
 /// Outbox-style notification. IN_APP rows are read by the app; other channels are delivered by workers.
+/// One notification event for one person. Per-channel delivery lives in NotificationDelivery, so a single
+/// event can reach in-app, email, push and SMS independently while read state stays here.
 model Notification {
-  id        String              @id @default(cuid())
+  id        String               @id @default(cuid())
   userId    String
   type      String
+  category  NotificationCategory @default(BOOKING)
   title     String
   body      String
   data      Json?
-  channel   NotificationChannel @default(IN_APP)
-  status    NotificationStatus  @default(SENT)
+  /// Where tapping the notification goes, resolved when it is created.
+  url       String?
+  /// Related notifications sharing this key collapse into one row in the centre (e.g. all join requests for one game).
+  groupKey  String?
+  /// Suppresses an identical notification raised again inside the type's quiet window.
+  dedupeKey String?
   readAt    DateTime?
-  sentAt    DateTime?
-  createdAt DateTime            @default(now())
+  createdAt DateTime             @default(now())
+
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries NotificationDelivery[]
+
+  @@index([userId, readAt, createdAt(sort: Desc)])
+  @@index([userId, groupKey])
+  @@index([userId, dedupeKey, createdAt])
+  @@index([createdAt])
+}
+
+/// One attempt to put a notification on one channel. IN_APP is marked SENT immediately; the others wait for a
+/// worker, which is why `provider` and `providerRef` exist but are unused until a provider is connected.
+model NotificationDelivery {
+  id             String              @id @default(cuid())
+  notificationId String
+  channel        NotificationChannel
+  status         NotificationStatus  @default(PENDING)
+  sentAt         DateTime?
+  failedAt       DateTime?
+  attempts       Int                 @default(0)
+  error          String?             @db.VarChar(500)
+  provider       String?
+  providerRef    String?
+  createdAt      DateTime            @default(now())
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, channel])
+  @@index([status, channel, createdAt])
+}
+
+/// Admin-editable wording for one notification type. Seeded from the code catalogue; `{{placeholders}}` are
+/// filled from the notification's data. Missing row means the catalogue default is used.
+model NotificationTemplate {
+  id          String                @id @default(cuid())
+  type        String                @unique
+  category    NotificationCategory
+  title       String                @db.VarChar(200)
+  body        String                @db.VarChar(1000)
+  /// Turning this off stops the type entirely, for everyone.
+  enabled     Boolean               @default(true)
+  /// Channels this type may use, before each person's own preferences narrow it.
+  channels    NotificationChannel[] @default([IN_APP])
+  updatedById String?
+  updatedAt   DateTime              @updatedAt
+
+  updatedBy User? @relation("TemplateUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+/// One row per person per category. Absent means the defaults in notification-catalog.ts apply.
+model NotificationPreference {
+  id        String               @id @default(cuid())
+  userId    String
+  category  NotificationCategory
+  inApp     Boolean              @default(true)
+  email     Boolean              @default(true)
+  push      Boolean              @default(false)
+  sms       Boolean              @default(false)
+  updatedAt DateTime             @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, readAt, createdAt(sort: Desc)])
-  @@index([status, channel, createdAt])
+  @@unique([userId, category])
+}
+
+// ---------------------------------------------------------------- Messaging
+
+/// A group chat attached to a game or a program. Membership is derived from the lineup or the roster, so
+/// nobody is added or removed here and no contact details are ever exposed.
+model MessageThread {
+  id         String            @id @default(cuid())
+  kind       MessageThreadKind
+  gameId     String?           @unique
+  programId  String?           @unique
+  /// Locked threads are read-only; staff lock one after a moderation decision.
+  lockedAt   DateTime?
+  lockedById String?
+  createdAt  DateTime          @default(now())
+
+  game     GameSession? @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  program  Program?     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  lockedBy User?        @relation("ThreadLockedBy", fields: [lockedById], references: [id], onDelete: SetNull)
+  messages Message[]
+}
+
+model Message {
+  id          String    @id @default(cuid())
+  threadId    String
+  senderId    String
+  body        String    @db.VarChar(2000)
+  /// Soft delete: the row stays so reports and the audit trail keep their target.
+  deletedAt   DateTime?
+  deletedById String?
+  createdAt   DateTime  @default(now())
+
+  thread    MessageThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender    User            @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  deletedBy User?           @relation("MessageDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  reports   MessageReport[]
+
+  @@index([threadId, createdAt])
+  @@index([senderId, createdAt(sort: Desc)])
+}
+
+model MessageReport {
+  id           String       @id @default(cuid())
+  messageId    String
+  reporterId   String
+  reason       String       @db.VarChar(60)
+  note         String?      @db.VarChar(500)
+  status       ReportStatus @default(OPEN)
+  reviewedById String?
+  reviewedAt   DateTime?
+  outcome      String?      @db.VarChar(500)
+  createdAt    DateTime     @default(now())
+
+  message    Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  reporter   User    @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reviewedBy User?   @relation("ReportReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([messageId, reporterId])
+  @@index([status, createdAt])
 }
 
 model AuditLog {

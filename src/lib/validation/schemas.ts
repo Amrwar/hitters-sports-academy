@@ -504,3 +504,36 @@ export const packagePurchaseSchema = z.object({
   validityDays: z.coerce.number().int().min(7).max(730).optional(),
   playerId: z.string().cuid().optional(),
 });
+
+/* ------------------------------------------------------------------ Notifications and messaging (phase: notifications) */
+
+export const notificationCategorySchema = z.enum(["BOOKING", "MATCHMAKING", "TRAINING", "ACADEMY", "MESSAGING"]);
+export const notificationChannelSchema = z.enum(["IN_APP", "EMAIL", "PUSH", "SMS"]);
+
+export const notificationPreferencesSchema = z.object({
+  rows: z
+    .array(z.object({ category: notificationCategorySchema, inApp: z.coerce.boolean(), email: z.coerce.boolean(), push: z.coerce.boolean(), sms: z.coerce.boolean() }))
+    .min(1)
+    .max(10),
+});
+
+export const notificationTemplateSchema = z.object({
+  title: z.string().trim().min(3).max(200),
+  body: z.string().trim().min(3).max(1000),
+  enabled: z.coerce.boolean(),
+  channels: z.array(notificationChannelSchema).min(1).max(4),
+});
+
+export const announcementSchema = z.object({
+  title: z.string().trim().min(3).max(120),
+  body: z.string().trim().min(3).max(1000),
+  /** Empty = everyone the sender may reach. */
+  locationId: z.string().cuid().optional(),
+  audience: z.enum(["PLAYERS", "STAFF", "EVERYONE"]).default("PLAYERS"),
+});
+
+export const messageSchema = z.object({ body: z.string().trim().min(1).max(2000) });
+
+export const MESSAGE_REPORT_REASONS = ["Abusive or offensive", "Spam or advertising", "Harassment", "Personal information", "Other"] as const;
+export const messageReportSchema = z.object({ reason: z.enum(MESSAGE_REPORT_REASONS), note: z.string().trim().max(500).optional().or(z.literal("").transform(() => undefined)) });
+export const reportDecisionSchema = z.object({ decision: z.enum(["ACTIONED", "DISMISSED"]), removeMessage: z.coerce.boolean().default(false), outcome: z.string().trim().max(500).optional().or(z.literal("").transform(() => undefined)) });

@@ -20,6 +20,7 @@ import {
   Menu,
   Search,
   Settings,
+  ShieldAlert,
   Swords,
   Users,
   UserSquare2,
@@ -52,6 +53,13 @@ const groups: { label: string; items: { href: string; label: string; icon: typeo
       { href: "/admin/coaching", label: "Coaching", icon: Dumbbell },
       { href: "/admin/courts", label: "Courts", icon: LayoutGrid },
       { href: "/admin/locations", label: "Locations", icon: MapPin },
+    ],
+  },
+  {
+    label: "Communication",
+    items: [
+      { href: "/admin/notifications", label: "Notifications", icon: Bell },
+      { href: "/admin/moderation", label: "Moderation", icon: ShieldAlert },
     ],
   },
   {

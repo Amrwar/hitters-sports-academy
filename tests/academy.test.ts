@@ -145,7 +145,7 @@ describe("private lessons", () => {
     expect((await lessons.respondToLessonRequest(w.coach.actor, l.id, "ACCEPT")).status).toBe("CONFIRMED");
     const l2 = await lessons.bookLesson(w.p3.actor, req(w, 12 * 60), { now: NOW });
     expect((await lessons.respondToLessonRequest(w.coach.actor, l2.id, "DECLINE")).status).toBe("CANCELLED");
-    expect(await db.notification.count({ where: { userId: w.p3.user.id, type: "lesson.cancelled" } })).toBe(1);
+    expect(await db.notification.count({ where: { userId: w.p3.user.id, type: "lesson.declined" } })).toBe(1);
     // Staff booking for a member is confirmed immediately.
     const staff = await lessons.bookLesson(w.receptionA.actor, req(w, 11 * 60, { playerId: w.p3.user.id }), { now: NOW });
     expect(staff.status).toBe("CONFIRMED");
@@ -237,7 +237,7 @@ describe("training programs", () => {
     await programs.cancelEnrollment(w.p1.actor, e1.id, {}, { now: new Date("2026-11-05T08:00:00Z") });
     const mine = await programs.listMyEnrollments(late.actor, NOW);
     expect(mine[0].status).toBe("ENROLLED");
-    expect(await db.notification.count({ where: { userId: late.user.id, type: "program.enrolled" } })).toBe(1);
+    expect(await db.notification.count({ where: { userId: late.user.id, type: "program.promoted" } })).toBe(1);
     expect((await programs.getProgram(w.p1.actor, p.id, NOW)).status).toBe("FULL");
 
     // Attendance by the trainer after session 1; present players get a training record once.

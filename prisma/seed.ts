@@ -9,6 +9,7 @@ import { PrismaClient, type CourtType, type PlayerLevel, type Prisma, type Staff
 import { hashPassword } from "../src/lib/auth/password";
 import { seedRolePermissions } from "../src/server/services/permissions-seed";
 import { DEFAULT_LEVELS } from "../src/server/services/levels";
+import { notify, seedNotificationTemplates } from "../src/server/services/notifications";
 
 const db = new PrismaClient();
 /** Shared password for every seeded account. Override with SEED_PASSWORD when seeding anything reachable from the internet. */
@@ -67,6 +68,8 @@ const USERS: SeedUser[] = [
 async function main() {
   const perms = await seedRolePermissions(db);
   console.log(`permissions: ${perms.total} grants (${perms.removed} stale removed)`);
+  const templates = await seedNotificationTemplates(db);
+  console.log(`notification templates: ${templates.total} types (${templates.created} added)`);
   await db.levelDefinition.createMany({ data: DEFAULT_LEVELS, skipDuplicates: true });
 
   const locationIds = new Map<string, string>();
@@ -185,8 +188,15 @@ async function main() {
         participants: { create: [{ userId: organizerId, role: "ORGANIZER", status: "ACCEPTED", invitedById: organizerId, respondedAt: new Date() }, ...lineup.map((l) => ({ userId: userIds.get(l.email)!, role: "PLAYER" as const, status: l.status, invitedById: organizerId, respondedAt: l.status === "ACCEPTED" ? new Date() : null }))] },
       },
     });
+    const club = LOCATIONS.find((x) => locationIds.get(x.slug) === b.locationId)?.name ?? "HITTERS";
     for (const l of lineup) {
-      if (l.status === "INVITED") await db.notification.create({ data: { userId: userIds.get(l.email)!, type: "game.invited", title: `${USERS.find((u) => u.email === email)!.name} invited you to a game`, body: `${LOCATIONS.find((x) => x.slug === (LOCATIONS.find((y) => locationIds.get(y.slug) === b.locationId)?.slug ?? "new-cairo"))!.name}`, data: { code } } });
+      if (l.status !== "INVITED") continue;
+      await notify(userIds.get(l.email)!, {
+        type: "game.invited",
+        url: `/app/play/${code}`,
+        groupKey: code,
+        data: { organizer: USERS.find((u) => u.email === email)!.name, when: b.startsAt.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }), club, court: "", code },
+      });
     }
   };
   const bOmar = await ensureBooking("HT-SEED01", "omar@example.com", "new-cairo", "Court 1", 1, 19, 90, 67500);
@@ -292,6 +302,35 @@ async function main() {
     await db.packagePurchase.create({ data: { code: "PK-SEED01", playerId: userIds.get("amr@example.com")!, packageId: five.id, name: five.name, credits: 5, creditsUsed: 1, priceCents: five.priceCents, locationId: locationIds.get("new-cairo")!, expiresAt: new Date(Date.now() + 80 * 86_400_000), status: "ACTIVE", createdById: userIds.get("reception.newcairo@hitters.academy")!, payments: { create: { amountCents: five.priceCents, status: "PAID", method: "CARD", paidAt: new Date() } } } });
   }
   console.log("academy: done");
+
+  // Notifications and group chat so the centre, the messages list and the moderation queue have content.
+  const gm1 = await db.gameSession.findUnique({ where: { code: "GM-SEED01" }, select: { id: true, code: true } });
+  if (gm1) {
+    const thread = (await db.messageThread.findFirst({ where: { gameId: gm1.id } })) ?? (await db.messageThread.create({ data: { kind: "GAME", gameId: gm1.id } }));
+    if ((await db.message.count({ where: { threadId: thread.id } })) === 0) {
+      const omar = userIds.get("omar@example.com")!;
+      const salma = userIds.get("salma@example.com")!;
+      const script = [
+        { senderId: omar, body: "Court 1 is booked. I'll bring a fresh tube of balls.", minutesAgo: 240 },
+        { senderId: salma, body: "Perfect. I can be there 15 minutes early to warm up.", minutesAgo: 180 },
+        { senderId: omar, body: "Same. Parking fills up fast on a Tuesday, so come early if you can.", minutesAgo: 95 },
+        { senderId: salma, body: "Noted. See you on court.", minutesAgo: 20 },
+      ];
+      for (const m of script) {
+        await db.message.create({ data: { threadId: thread.id, senderId: m.senderId, body: m.body, createdAt: new Date(Date.now() - m.minutesAgo * 60_000) } });
+      }
+    }
+  }
+
+  const amrId = userIds.get("amr@example.com")!;
+  if ((await db.notification.count({ where: { userId: amrId } })) < 3) {
+    const nc = LOCATIONS.find((l) => l.slug === "new-cairo")!.name;
+    const whenAmr = bAmr.startsAt.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    await notify(amrId, { type: "booking.confirmed", url: `/app/bookings/${bAmr.id}`, data: { code: "HT-SEED02", club: nc, court: "Court 3", when: whenAmr, duration: 60 } });
+    await notify(amrId, { type: "package.purchased", url: "/app/packages", data: { package: "5 lessons", credits: 5, creditsPlural: "s", expires: new Date(Date.now() + 80 * 86_400_000).toISOString().slice(0, 10) } });
+    await notify(amrId, { type: "academy.announcement", url: "/app/notifications", dedupeKey: null, data: { title: "New Cairo courts resurfaced", body: "Courts 1 to 4 have fresh turf from Monday. Expect a slightly faster bounce." } });
+  }
+  console.log("notifications: done");
 
   console.log(`\nSeed complete. Sign in with any seeded email and the development password defined in prisma/seed.ts.`);
 }

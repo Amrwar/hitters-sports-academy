@@ -1,18 +1,23 @@
 /**
  * Idempotent production sync, run on every deploy after migrations:
  * - keeps RolePermission in sync with the code matrix (without it nobody has permissions)
+ * - writes any notification template the catalogue has gained, never touching wording an admin edited
  * - creates the first SUPER_ADMIN from BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD when
  *   no super admin exists yet (the password variable can be removed afterwards)
  */
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../src/lib/auth/password";
 import { seedRolePermissions } from "../src/server/services/permissions-seed";
+import { seedNotificationTemplates } from "../src/server/services/notifications";
 
 const db = new PrismaClient();
 
 async function main() {
   const perms = await seedRolePermissions(db);
   console.log(`[sync] permissions: ${perms.total} grants (${perms.removed} stale removed)`);
+
+  const templates = await seedNotificationTemplates(db);
+  console.log(`[sync] notification templates: ${templates.total} types (${templates.created} added)`);
 
   const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
   const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;

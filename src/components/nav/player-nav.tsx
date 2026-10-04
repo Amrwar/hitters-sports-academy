@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, CalendarPlus, ChevronLeft, GraduationCap, Home, Swords, User } from "lucide-react";
+import { Bell, CalendarPlus, ChevronLeft, GraduationCap, Home, MessageSquare, Swords, User } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Monogram, Wordmark } from "@/components/brand/Logo";
 import { Avatar } from "@/components/ui/avatar";
@@ -71,6 +71,9 @@ export function PlayerTopBar({ unread = 0, userName }: TopBarProps) {
           <Wordmark height={14} className="hidden min-[360px]:block" />
         </Link>
         <div className="flex items-center gap-2">
+          <IconButton variant="ghost" size="md" label="Messages" href="/app/messages">
+            <MessageSquare />
+          </IconButton>
           <IconButton variant="ghost" size="md" label={unread ? `${unread} unread notifications` : "Notifications"} href="/app/notifications" className="relative">
             <Bell />
             {unread > 0 && <span className="absolute right-2.5 top-2.5 size-2 rounded-full bg-volt ring-2 ring-canvas" />}

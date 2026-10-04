@@ -25,7 +25,7 @@ export async function updateProfileAction(profileId: string, input: FormData | R
   }
 }
 
-export async function markNotificationReadAction(id: string): Promise<ActionResult<{ ok: true }>> {
+export async function markNotificationReadAction(id: string): Promise<ActionResult<{ updated: number }>> {
   try {
     const res = await markNotificationRead(await getActor(), id);
     revalidatePath("/app/notifications");

@@ -8,7 +8,8 @@ import { canWaitlist, compareMatches, evaluateMatch, type MatchCandidate, type M
 import { decideRequestSchema, fieldErrors, findMatchesSchema, joinRequestSchema, matchmakingConfigSchema } from "@/lib/validation/schemas";
 import { decorate, gameSelect, waitlistPending, advanceElapsedGames, type GameView } from "./game-sessions";
 import { getLevelDefinitions } from "./levels";
-import { notify } from "./notifications";
+import { notify, notifyMany } from "./notifications";
+import { suffix } from "@/lib/notifications";
 import { requireActivePair, type PairView } from "./pairs";
 
 /* ------------------------------------------------------------------ Academy configuration */
@@ -243,10 +244,10 @@ export async function requestToJoin(actor: Actor | null, sessionId: string, inpu
     return viewRequest(r);
   });
   const who = pair ? `${a.name} and ${(pair.playerAId === a.id ? pair.playerB : pair.playerA).name.split(" ")[0]}` : a.name;
-  await notify(game.organizerId, { type: "game.request", title: waitlist ? `${who} joined the waitlist` : `${who} asked to join your game`, body: `${reasons.slice(0, 3).join(" · ")} · ${game.code}`, data: { gameId: game.id, code: game.code, requestId: created.id } });
+  await notify(game.organizerId, { type: waitlist ? "game.request_waitlist" : "game.request", url: `/app/play/${game.code}`, groupKey: game.id, data: { who, reasons: reasons.slice(0, 3).join(" · "), code: game.code, gameId: game.id, requestId: created.id } });
   if (pair) {
     const partnerId = pair.playerAId === a.id ? pair.playerBId : pair.playerAId;
-    await notify(partnerId, { type: "game.request_sent", title: `${a.name} requested a game for your pair`, body: `${game.location.name} · ${game.code}. You will both be added if the organizer accepts.`, data: { gameId: game.id, code: game.code, requestId: created.id } });
+    await notify(partnerId, { type: "game.request_sent", url: `/app/play/${game.code}`, data: { player: a.name, club: game.location.name, code: game.code, gameId: game.id, requestId: created.id } });
   }
   return created;
 }
@@ -262,7 +263,7 @@ export async function withdrawRequest(actor: Actor | null, requestId: string, op
     await audit({ actorId: a.id, action: "game.request_withdrawn", entityType: "GameJoinRequest", entityId: r.id, locationId: r.game.locationId }, tx);
     return loadRequest(r.id, tx);
   });
-  await notify(r.game.organizerId, { type: "game.request_withdrawn", title: `${a.name} withdrew a request`, body: r.game.code, data: { gameId: r.game.id, code: r.game.code } });
+  await notify(r.game.organizerId, { type: "game.request_withdrawn", url: `/app/play/${r.game.code}`, groupKey: r.game.id, data: { player: a.name, code: r.game.code, gameId: r.game.id } });
   return updated;
 }
 
@@ -287,7 +288,7 @@ export async function decideRequest(actor: Actor | null, requestId: string, inpu
       await audit({ actorId: a.id, action: "game.request_declined", entityType: "GameJoinRequest", entityId: r.id, locationId: r.game.locationId, metadata: { note: parsed.data.note } }, tx);
       return loadRequest(r.id, tx);
     });
-    await Promise.all(members.map((userId) => notify(userId, { type: "game.request_declined", title: "Request declined", body: parsed.data.note ? `${r.game.code} · ${parsed.data.note}` : `${r.game.code} · the organizer chose another lineup.`, data: { gameId: r.game.id, code: r.game.code } })));
+    await notifyMany(members, { type: "game.request_declined", url: `/app/play/${r.game.code}`, data: { code: r.game.code, reasonSuffix: suffix(parsed.data.note || "The organizer chose another lineup."), gameId: r.game.id } });
     return updated;
   }
 
@@ -323,9 +324,12 @@ export async function decideRequest(actor: Actor | null, requestId: string, inpu
   const g = updated.game;
   const names = members.length === 2 ? `${updated.pair!.playerA.name.split(" ")[0]} and ${updated.pair!.playerB.name.split(" ")[0]}` : updated.user.name;
   await Promise.all([
-    ...members.map((userId) => notify(userId, { type: "game.request_accepted", title: "You're in!", body: `${g.location.name} · ${g.court.name} · ${g.code}. ${g.acceptedCount} of ${g.maxPlayers} players.`, data: { gameId: g.id, code: g.code } })),
-    ...g.participants.filter((p) => p.status === "ACCEPTED" && !members.includes(p.userId) && p.userId !== a.id).map((p) => notify(p.userId, { type: "game.lineup", title: `${names} joined your game`, body: `${g.acceptedCount} of ${g.maxPlayers} players · ${g.code}`, data: { gameId: g.id, code: g.code } })),
-    ...waitlisted.map((userId) => notify(userId, { type: "game.request_waitlisted", title: "The game filled up; you are waitlisted", body: `${g.code} · you move back to pending if a spot opens.`, data: { gameId: g.id, code: g.code } })),
+    notifyMany(members, { type: "game.request_accepted", url: `/app/play/${g.code}`, groupKey: g.id, data: { club: g.location.name, court: g.court.name, code: g.code, accepted: g.acceptedCount, max: g.maxPlayers, gameId: g.id } }),
+    notifyMany(
+      g.participants.filter((p) => p.status === "ACCEPTED" && !members.includes(p.userId) && p.userId !== a.id).map((p) => p.userId),
+      { type: "game.lineup", url: `/app/play/${g.code}`, groupKey: g.id, data: { player: names, accepted: g.acceptedCount, max: g.maxPlayers, code: g.code, gameId: g.id } },
+    ),
+    notifyMany(waitlisted, { type: "game.request_waitlisted", url: `/app/play/${g.code}`, groupKey: g.id, data: { code: g.code, gameId: g.id } }),
   ]);
   return updated;
 }
@@ -402,4 +406,64 @@ export async function getMyRequestForGame(actor: Actor | null, sessionId: string
   const a = await requireActor(actor);
   const row = await db.gameJoinRequest.findFirst({ where: { sessionId, OR: [{ userId: a.id }, { pair: { OR: [{ playerAId: a.id }, { playerBId: a.id }] } }] }, select: requestSelect, orderBy: { createdAt: "desc" } });
   return row ? viewRequest(row) : null;
+}
+
+/* ------------------------------------------------------------------ Suggesting a game to compatible players */
+
+/**
+ * The reverse of findMatches: given one open game, which players does it fit? Used when a game is published
+ * or a spot reopens, so "a new compatible session" reaches the people it actually suits.
+ *
+ * The same deterministic engine decides, so a suggestion is explainable with the same reasons the player
+ * sees on the game page. Only a strong match is worth interrupting someone for, so weak scores are dropped
+ * and the notification's own quiet window stops a player hearing about the same game twice.
+ */
+export async function announceCompatibleGame(gameId: string, opts: { now?: Date; minScore?: number; take?: number } = {}): Promise<{ notified: number; considered: number }> {
+  const now = opts.now ?? new Date();
+  const row = await db.gameSession.findUnique({ where: { id: gameId }, select: gameSelect });
+  if (!row) return { notified: 0, considered: 0 };
+  const game = decorate(row);
+  if (game.visibility !== "PUBLIC" || game.status !== "OPEN" || !game.openToRequests || game.startsAt <= now) return { notified: 0, considered: 0 };
+
+  const config = await matchConfig();
+  const candidate = toCandidate(game);
+  const already = new Set([game.organizerId, ...game.participants.map((p) => p.userId), ...candidate.requests.map((r) => r.userId)]);
+  const profiles = await db.playerProfile.findMany({
+    where: { user: { status: "ACTIVE", id: { notIn: [...already] } }, ...(game.levels.length ? { level: { not: null } } : {}) },
+    select: { userId: true, ...seekerProfileSelect },
+    take: 500,
+  });
+
+  const fits: { userId: string; score: number; reasons: string[] }[] = [];
+  for (const p of profiles) {
+    const seeker: Seeker = {
+      userId: p.userId,
+      level: p.level,
+      homeLocationId: p.homeLocationId,
+      preferredLocationIds: p.preferredLocations.map((l) => l.id),
+      preferredTimes: p.preferredTimes,
+      matchType: p.matchType,
+      kind: "SOLO",
+      partner: null,
+    };
+    const match = evaluateMatch(candidate, seeker, config);
+    if (!match.eligible) continue;
+    if (match.score < (opts.minScore ?? 60)) continue;
+    fits.push({ userId: p.userId, score: match.score, reasons: match.reasons.slice(0, 2).map((r) => r.label) });
+  }
+  fits.sort((x, y) => y.score - x.score || x.userId.localeCompare(y.userId));
+  const shortlist = fits.slice(0, opts.take ?? 20);
+
+  const z = utcToZoned(game.startsAt, game.location.timezone);
+  let notified = 0;
+  for (const f of shortlist) {
+    const res = await notify(f.userId, {
+      type: "match.suggested",
+      url: `/app/play/${game.code}`,
+      groupKey: game.id,
+      data: { when: `${z.dateISO} ${String(Math.floor(z.minutes / 60)).padStart(2, "0")}:${String(z.minutes % 60).padStart(2, "0")}`, club: game.location.name, reasons: f.reasons.join(" · "), code: game.code, gameId: game.id },
+    }).catch(() => null);
+    if (res?.created) notified++;
+  }
+  return { notified, considered: profiles.length };
 }

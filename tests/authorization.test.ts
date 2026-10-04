@@ -316,14 +316,15 @@ describe("assessments", () => {
 describe("notifications", () => {
   it("are private to their owner and staff can only message players at their location", async () => {
     const w = await world();
-    const n = await notifications.notify(w.playerA.user.id, { type: "test", title: "Hi", body: "There" });
+    const n = await notifications.notify(w.playerA.user.id, { type: "academy.announcement", data: { title: "Hi", body: "There" } });
+    expect(n).not.toBeNull();
     expect((await notifications.listMyNotifications(w.playerA.actor)).unread).toBe(1);
-    await expectCode(notifications.markNotificationRead(w.playerB.actor, n.id), "NOT_FOUND");
-    await notifications.markNotificationRead(w.playerA.actor, n.id);
+    await expectCode(notifications.markNotificationRead(w.playerB.actor, n!.id), "NOT_FOUND");
+    await notifications.markNotificationRead(w.playerA.actor, n!.id);
     expect((await notifications.listMyNotifications(w.playerA.actor)).unread).toBe(0);
-    await notifications.sendNotification(w.receptionA.actor, w.playerA.user.id, w.A.id, { type: "desk", title: "Your racket is ready", body: "Pick it up at reception." });
-    await expectCode(notifications.sendNotification(w.receptionA.actor, w.playerB.user.id, w.B.id, { type: "desk", title: "x", body: "y" }), "FORBIDDEN");
-    await expectCode(notifications.sendNotification(w.trainerA.actor, w.playerA.user.id, w.A.id, { type: "desk", title: "x", body: "y" }), "FORBIDDEN");
+    await notifications.sendNotification(w.receptionA.actor, w.playerA.user.id, w.A.id, { title: "Your racket is ready", body: "Pick it up at reception." });
+    await expectCode(notifications.sendNotification(w.receptionA.actor, w.playerB.user.id, w.B.id, { title: "x", body: "y" }), "FORBIDDEN");
+    await expectCode(notifications.sendNotification(w.trainerA.actor, w.playerA.user.id, w.A.id, { title: "x", body: "y" }), "FORBIDDEN");
     await expectCode(notifications.listMyNotifications(null), "UNAUTHENTICATED");
   });
 });

@@ -6,6 +6,7 @@ import { getGameSession } from "@/server/services/game-sessions";
 import { getLevelDefinitions } from "@/server/services/levels";
 import { evaluateGameForActor, getMyRequestForGame, listSessionRequests } from "@/server/services/matchmaking";
 import { listMyPairs } from "@/server/services/pairs";
+import { ThreadSection } from "@/components/patterns/thread-section";
 import { GameDetail } from "./game-view";
 
 export const dynamic = "force-dynamic";
@@ -27,15 +28,18 @@ export default async function GamePage({ params }: { params: Promise<{ code: str
     organizer || staffReads ? listSessionRequests(actor, game.id).catch(() => []) : null,
   ]);
   return (
-    <GameDetail
-      game={game}
-      viewerId={actor.id}
-      staffCanManage={staff}
-      levels={Object.fromEntries(levels.map((l) => [l.level, l.label]))}
-      compat={{ solo, pair }}
-      pairs={pairs.map((p) => ({ id: p.id, label: p.name?.trim() || `with ${(p.playerAId === actor.id ? p.playerB : p.playerA).name.split(" ")[0]}` }))}
-      requests={requests}
-      myRequest={myRequest}
-    />
+    <div className="space-y-8">
+      <GameDetail
+        game={game}
+        viewerId={actor.id}
+        staffCanManage={staff}
+        levels={Object.fromEntries(levels.map((l) => [l.level, l.label]))}
+        compat={{ solo, pair }}
+        pairs={pairs.map((p) => ({ id: p.id, label: p.name?.trim() || `with ${(p.playerAId === actor.id ? p.playerB : p.playerA).name.split(" ")[0]}` }))}
+        requests={requests}
+        myRequest={myRequest}
+      />
+      <ThreadSection actor={actor} kind="GAME" subjectId={game.id} path={`/app/play/${code}`} />
+    </div>
   );
 }

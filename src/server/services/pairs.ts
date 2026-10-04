@@ -51,7 +51,7 @@ export async function proposePair(actor: Actor | null, input: unknown): Promise<
     await audit({ actorId: a.id, action: "pair.proposed", entityType: "Pair", entityId: p.id, metadata: { partnerUserId } }, tx);
     return p;
   });
-  await notify(partnerUserId, { type: "pair.proposed", title: `${a.name} wants to play as a pair`, body: "Confirm the pair to request games together.", data: { pairId: pair.id } });
+  await notify(partnerUserId, { type: "pair.proposed", url: "/app/play/pairs", data: { player: a.name, pairId: pair.id } });
   return pair;
 }
 
@@ -65,7 +65,7 @@ export async function respondToPair(actor: Actor | null, pairId: string, respons
       await tx.pair.delete({ where: { id: pairId } });
       await audit({ actorId: a.id, action: "pair.declined", entityType: "Pair", entityId: pairId }, tx);
     });
-    await notify(pair.createdById, { type: "pair.declined", title: `${a.name} declined the pair`, body: "You can propose again later.", data: {} });
+    await notify(pair.createdById, { type: "pair.declined", url: "/app/play/pairs", data: { player: a.name } });
     return null;
   }
   const updated = await db.$transaction(async (tx) => {
@@ -73,7 +73,7 @@ export async function respondToPair(actor: Actor | null, pairId: string, respons
     await audit({ actorId: a.id, action: "pair.confirmed", entityType: "Pair", entityId: pairId }, tx);
     return p;
   });
-  await notify(pair.createdById, { type: "pair.confirmed", title: `${a.name} confirmed your pair`, body: "Find a match together or open a challenge.", data: { pairId } });
+  await notify(pair.createdById, { type: "pair.confirmed", url: "/app/play/pairs", data: { player: a.name, pairId } });
   return updated;
 }
 
@@ -88,7 +88,7 @@ export async function dissolvePair(actor: Actor | null, pairId: string): Promise
     await tx.pair.delete({ where: { id: pairId } });
     await audit({ actorId: a.id, action: "pair.dissolved", entityType: "Pair", entityId: pairId }, tx);
   });
-  await notify(other.id, { type: "pair.dissolved", title: `${a.name} ended your pair`, body: "Pending pair requests were withdrawn.", data: {} });
+  await notify(other.id, { type: "pair.dissolved", url: "/app/play/pairs", data: { player: a.name } });
   return { ok: true };
 }
 

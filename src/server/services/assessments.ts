@@ -5,6 +5,7 @@ import { conflict, forbidden, notFound, validation } from "@/lib/errors";
 import { accessibleLocationIds, can, requireActor, requirePermission, type Actor } from "@/lib/auth/authorize";
 import { assessmentSchema, fieldErrors, levelChangeSchema, requestAssessmentSchema, scheduleAssessmentSchema } from "@/lib/validation/schemas";
 import { notify } from "./notifications";
+import { suffix } from "@/lib/notifications";
 import { getLevelMap } from "./levels";
 
 /* ------------------------------------------------------------------ Selects */
@@ -89,7 +90,7 @@ export async function cancelAssessmentRequest(actor: Actor | null, requestId: st
     await audit({ actorId: a.id, action: "assessment.request_cancelled", entityType: "AssessmentRequest", entityId: requestId, locationId: r.locationId, metadata: { byStaff: !own, reason } }, tx);
     return u;
   });
-  if (!own) await notify(r.playerProfile.user.id, { type: "assessment.cancelled", title: "Assessment request declined", body: reason ?? `${r.location.name} could not schedule your assessment. You can request again.`, data: { requestId } });
+  if (!own) await notify(r.playerProfile.user.id, { type: "assessment.cancelled", url: "/app/profile", data: { club: r.location.name, reasonSuffix: suffix(reason), requestId } });
   return updated;
 }
 
@@ -115,9 +116,13 @@ export async function scheduleAssessment(actor: Actor | null, requestId: string,
   });
   await notify(r.playerProfile.user.id, {
     type: "assessment.scheduled",
-    title: "Your assessment is booked",
-    body: `${r.location.name} · ${parsed.data.scheduledAt.toLocaleString("en-GB", { timeZone: r.location.timezone, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}${updated.assessor ? ` with ${updated.assessor.name}` : ""}.`,
-    data: { requestId },
+    url: "/app/profile",
+    data: {
+      club: r.location.name,
+      when: parsed.data.scheduledAt.toLocaleString("en-GB", { timeZone: r.location.timezone, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }),
+      assessorSuffix: updated.assessor ? ` with ${updated.assessor.name}` : "",
+      requestId,
+    },
   });
   return updated;
 }
@@ -171,9 +176,16 @@ export async function createAssessment(actor: Actor | null, input: unknown): Pro
   });
   await notify(profile.userId, {
     type: "assessment.completed",
-    title: `Official level: ${level} · ${levels[level].label}`,
-    body: `${kind === "REASSESSMENT" ? "Reassessed" : "Assessed"} at ${location.name} by ${a.name}.${profile.level && profile.level !== level ? ` Previously ${profile.level}.` : ""}`,
-    data: { assessmentId: assessment.id, level },
+    url: "/app/profile",
+    data: {
+      level,
+      label: levels[level].label,
+      kind: kind === "REASSESSMENT" ? "Reassessed" : "Assessed",
+      club: location.name,
+      assessor: a.name,
+      previousSuffix: suffix(profile.level && profile.level !== level ? `Previously ${profile.level}.` : ""),
+      assessmentId: assessment.id,
+    },
   });
   return assessment;
 }
@@ -205,7 +217,7 @@ export async function recordLevelChange(actor: Actor | null, input: unknown): Pr
     await audit({ actorId: a.id, action: "assessment.level_changed", entityType: "Assessment", entityId: row.id, locationId, metadata: { playerProfileId: profile.id, from: profile.level, to: parsed.data.level, reason: parsed.data.reason } }, tx);
     return row;
   });
-  await notify(profile.userId, { type: "assessment.completed", title: `Official level updated: ${parsed.data.level} · ${levels[parsed.data.level].label}`, body: parsed.data.reason, data: { assessmentId: created.id, level: parsed.data.level } });
+  await notify(profile.userId, { type: "assessment.level_changed", url: "/app/profile", data: { level: parsed.data.level, label: levels[parsed.data.level].label, reason: parsed.data.reason, assessmentId: created.id } });
   return created;
 }
 

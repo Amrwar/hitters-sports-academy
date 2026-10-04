@@ -4,7 +4,9 @@ import { audit } from "@/lib/audit";
 import { conflict, notFound, validation } from "@/lib/errors";
 import { can, requireActor, requirePermission, type Actor } from "@/lib/auth/authorize";
 import { availabilitySchema, closureLocalSchema, closureSchema, courtDetailsSchema, courtSchema, fieldErrors } from "@/lib/validation/schemas";
-import { localInputToUtc } from "@/lib/time";
+import { formatInZone, localInputToUtc } from "@/lib/time";
+import { suffix } from "@/lib/notifications";
+import { notify } from "./notifications";
 
 export const courtSelect = {
   id: true,
@@ -134,14 +136,41 @@ export async function addCourtClosure(actor: Actor | null, courtId: string, inpu
   }
   if (endsAt.getTime() - startsAt.getTime() > 90 * 86_400_000) throw validation("A single closure cannot exceed 90 days.", { endLocal: "Maximum 90 days." });
 
-  return db.$transaction(async (tx) => {
+  const closure = await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "Court" WHERE "id" = ${courtId} FOR UPDATE`;
     const overlap = await tx.courtClosure.findFirst({ where: { courtId, startsAt: { lt: endsAt }, endsAt: { gt: startsAt } }, select: { id: true, startsAt: true, endsAt: true } });
     if (overlap) throw conflict("This period overlaps an existing closure.");
-    const closure = await tx.courtClosure.create({ data: { courtId, startsAt, endsAt, reason } });
-    await audit({ actorId: a.id, action: "court.closure_added", entityType: "CourtClosure", entityId: closure.id, locationId: court.locationId, metadata: { startsAt, endsAt, reason } }, tx);
-    return closure;
+    const row = await tx.courtClosure.create({ data: { courtId, startsAt, endsAt, reason } });
+    await audit({ actorId: a.id, action: "court.closure_added", entityType: "CourtClosure", entityId: row.id, locationId: court.locationId, metadata: { startsAt, endsAt, reason } }, tx);
+    return row;
   });
+  await warnAffectedBookings(courtId, startsAt, endsAt, reason);
+  return closure;
+}
+
+/**
+ * A closure does not cancel bookings on its own, so the players holding one are told the court is out of
+ * action and that the club will be in touch. Failing here must not undo a closure the staff just made.
+ */
+async function warnAffectedBookings(courtId: string, startsAt: Date, endsAt: Date, reason?: string): Promise<void> {
+  try {
+    const affected = await db.booking.findMany({
+      where: { courtId, status: { in: ["CONFIRMED", "PENDING"] }, startsAt: { lt: endsAt }, endsAt: { gt: startsAt }, playerId: { not: null } },
+      select: { id: true, playerId: true, confirmationCode: true, startsAt: true, court: { select: { name: true } }, location: { select: { name: true, timezone: true } } },
+      take: 200,
+    });
+    for (const b of affected) {
+      if (!b.playerId) continue;
+      await notify(b.playerId, {
+        type: "booking.court_unavailable",
+        url: `/app/bookings/${b.id}`,
+        dedupeKey: `booking.court_unavailable:${b.id}`,
+        data: { code: b.confirmationCode, club: b.location.name, court: b.court.name, when: formatInZone(b.startsAt, b.location.timezone), reasonSuffix: suffix(reason) },
+      });
+    }
+  } catch (e) {
+    console.error("[court] warning players about a closure failed", e);
+  }
 }
 
 export async function removeCourtClosure(actor: Actor | null, closureId: string) {

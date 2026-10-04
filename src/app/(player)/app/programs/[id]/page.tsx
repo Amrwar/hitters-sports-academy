@@ -4,6 +4,7 @@ import { isAppError } from "@/lib/errors";
 import { getProgram, listMyEnrollments } from "@/server/services/programs";
 import { getLevelDefinitions } from "@/server/services/levels";
 import { getMyProfile } from "@/server/services/profiles";
+import { ThreadSection } from "@/components/patterns/thread-section";
 import { ProgramDetail } from "./program-detail";
 
 export const dynamic = "force-dynamic";
@@ -18,5 +19,10 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
   if (!program) notFound();
   const [levels, mine, profile] = await Promise.all([getLevelDefinitions(), listMyEnrollments(actor), getMyProfile(actor)]);
   const enrollment = mine.find((e) => e.programId === program.id) ?? null;
-  return <ProgramDetail program={program} enrollment={enrollment} levels={Object.fromEntries(levels.map((l) => [l.level, l.label]))} myLevel={profile.level} />;
+  return (
+    <div className="space-y-8">
+      <ProgramDetail program={program} enrollment={enrollment} levels={Object.fromEntries(levels.map((l) => [l.level, l.label]))} myLevel={profile.level} />
+      <ThreadSection actor={actor} kind="PROGRAM" subjectId={program.id} path={`/app/programs/${id}`} />
+    </div>
+  );
 }

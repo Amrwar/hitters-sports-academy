@@ -6,7 +6,8 @@ import { AppError, forbidden, notFound, validation } from "@/lib/errors";
 import { accessibleLocationIds, can, requireActor, requirePermission, type Actor } from "@/lib/auth/authorize";
 import { formatInZone, zonedToUtc } from "@/lib/time";
 import { fieldErrors, lessonAttendanceSchema, lessonCancelSchema, lessonRequestSchema, progressNoteSchema } from "@/lib/validation/schemas";
-import { notify } from "./notifications";
+import { notify, notifyMany } from "./notifications";
+import { suffix } from "@/lib/notifications";
 import { getTrainerDay, LESSON_CANCEL_CUTOFF_HOURS, LESSON_WINDOW_DAYS, trainerSelect, type TrainerView } from "./trainers";
 
 /* ------------------------------------------------------------------ Select */
@@ -162,11 +163,20 @@ export async function bookLesson(actor: Actor | null, input: unknown, opts: { no
       },
       { isolationLevel: "ReadCommitted" },
     );
-    const when = `${formatInZone(startsAt, loc.timezone)} · ${loc.name}`;
+    const pending = lesson.status === "REQUESTED";
+    const shared = { when: formatInZone(startsAt, loc.timezone), club: loc.name, duration: durationMinutes, code: lesson.code, lessonId: lesson.id };
     await Promise.all([
-      notify(trainer.userId, { type: "lesson.booked", title: lesson.status === "REQUESTED" ? `${player.name} requested a lesson` : `New lesson with ${player.name}`, body: `${when} · ${durationMinutes} min`, data: { lessonId: lesson.id, code: lesson.code } }),
-      playerId !== a.id || lesson.status === "REQUESTED"
-        ? notify(playerId, { type: "lesson.booked", title: lesson.status === "REQUESTED" ? `Lesson requested with ${trainer.user.name}` : `Lesson booked with ${trainer.user.name}`, body: `${when}${lesson.status === "REQUESTED" ? " · waiting for the coach to confirm" : ""}`, data: { lessonId: lesson.id, code: lesson.code } })
+      notify(trainer.userId, {
+        type: "lesson.booked",
+        url: `/admin/coaching`,
+        data: { ...shared, headline: pending ? `${player.name} requested a lesson` : `New lesson with ${player.name}`, pendingSuffix: suffix(pending ? "Confirm or decline it from your calendar." : "") },
+      }),
+      playerId !== a.id || pending
+        ? notify(playerId, {
+            type: "lesson.booked",
+            url: `/app/lessons/${lesson.id}`,
+            data: { ...shared, headline: pending ? `Lesson requested with ${trainer.user.name}` : `Lesson booked with ${trainer.user.name}`, pendingSuffix: suffix(pending ? "Waiting for the coach to confirm." : "") },
+          })
         : Promise.resolve(),
     ]);
     return lesson;
@@ -216,7 +226,7 @@ export async function cancelLesson(actor: Actor | null, lessonId: string, input:
   });
   const when = formatInZone(l.startsAt, l.location.timezone);
   const others = [l.playerId, l.trainer.userId].filter((id) => id !== a.id);
-  await Promise.all(others.map((userId) => notify(userId, { type: "lesson.cancelled", title: `Lesson ${l.code} cancelled`, body: parsed.data.reason ? `${when} · ${parsed.data.reason}` : when, data: { lessonId: l.id, code: l.code } })));
+  await notifyMany(others, { type: "lesson.cancelled", url: `/app/lessons/${l.id}`, groupKey: l.id, data: { code: l.code, when, club: l.location.name, reasonSuffix: suffix(parsed.data.reason), lessonId: l.id } });
   return updated;
 }
 
@@ -261,7 +271,7 @@ export async function rescheduleLesson(actor: Actor | null, lessonId: string, in
       { isolationLevel: "ReadCommitted" },
     );
     const others = [old.playerId, old.trainer.userId].filter((id) => id !== a.id);
-    await Promise.all(others.map((userId) => notify(userId, { type: "lesson.rescheduled", title: `Lesson moved · ${created.code}`, body: `${formatInZone(created.startsAt, created.location.timezone)} · ${created.location.name}`, data: { lessonId: created.id, code: created.code } })));
+    await notifyMany(others, { type: "lesson.rescheduled", url: `/app/lessons/${created.id}`, groupKey: created.id, data: { code: created.code, when: formatInZone(created.startsAt, created.location.timezone), club: created.location.name, lessonId: created.id } });
     return created;
   } catch (e) {
     if (isOverlapError(e)) throw new AppError("SLOT_UNAVAILABLE", "That time was just taken.");
@@ -286,7 +296,11 @@ export async function respondToLessonRequest(actor: Actor | null, lessonId: stri
     await audit({ actorId: a.id, action: response === "ACCEPT" ? "lesson.confirmed" : "lesson.declined", entityType: "Lesson", entityId: l.id, locationId: l.locationId }, tx);
     return loadLesson(l.id, tx);
   });
-  await notify(l.playerId, { type: response === "ACCEPT" ? "lesson.confirmed" : "lesson.cancelled", title: response === "ACCEPT" ? `${l.trainer.user.name} confirmed your lesson` : `${l.trainer.user.name} can't make that time`, body: `${formatInZone(l.startsAt, l.location.timezone)} · ${l.location.name}`, data: { lessonId: l.id, code: l.code } });
+  await notify(l.playerId, {
+    type: response === "ACCEPT" ? "lesson.confirmed" : "lesson.declined",
+    url: `/app/lessons/${l.id}`,
+    data: { coach: l.trainer.user.name, when: formatInZone(l.startsAt, l.location.timezone), club: l.location.name, code: l.code, lessonId: l.id },
+  });
   return updated;
 }
 
@@ -346,7 +360,7 @@ export async function addProgressNote(actor: Actor | null, input: unknown): Prom
     await audit({ actorId: a.id, action: "note.added", entityType: "ProgressNote", entityId: n.id, metadata: { playerId, visibility } }, tx);
     return n;
   });
-  if (visibility === "SHARED") await notify(playerId, { type: "lesson.note", title: `${a.name} left you a note`, body: body.slice(0, 120), data: { noteId: note.id, lessonId } });
+  if (visibility === "SHARED") await notify(playerId, { type: "lesson.note", url: `/app/lessons/${lessonId}`, data: { coach: a.name, excerpt: body.slice(0, 160), noteId: note.id, lessonId } });
   return note;
 }
 

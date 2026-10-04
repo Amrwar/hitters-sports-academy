@@ -55,7 +55,7 @@ export async function grantStaffRole(actor: Actor | null, input: unknown): Promi
     await audit({ actorId: a.id, action: "staff.granted", entityType: "StaffMembership", entityId: m.id, locationId, metadata: { userId, role } }, tx);
     return m;
   });
-  await notify(userId, { type: "staff.granted", title: `You're now ${role.toLowerCase().replace("_", " ")} at ${location.name}`, body: "Open the admin area to get started.", data: { locationId, role } });
+  await notify(userId, { type: "staff.granted", url: "/admin", data: { role: role.toLowerCase().replace("_", " "), club: location.name, locationId } });
   return membership;
 }
 

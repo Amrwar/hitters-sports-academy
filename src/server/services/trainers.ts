@@ -105,7 +105,7 @@ export async function createTrainerProfile(actor: Actor | null, input: unknown):
     await audit({ actorId: a.id, action: "trainer.created", entityType: "TrainerProfile", entityId: t.id, metadata: { userId, locationIds } }, tx);
     return t;
   });
-  await notify(userId, { type: "trainer.profile", title: "Your coaching profile is live", body: "Set your weekly availability from Admin › Coaching.", data: { trainerId: created.id } });
+  await notify(userId, { type: "trainer.profile", url: "/admin/trainers", data: { trainerId: created.id } });
   return created;
 }
 
