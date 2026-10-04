@@ -145,8 +145,8 @@ export function AnalyticsView({ report, weeks }: { report: AnalyticsReport; week
           <CardHeader title="Academy" description="Coaching and programs" action={<Badge tone={academy.fillRate >= 70 ? "success" : "neutral"}>{academy.fillRate}% of places taken</Badge>} />
           <dl className="grid grid-cols-2 gap-4">
             {[
-              { k: "Live programs", v: academy.programs.toLocaleString("en") },
-              { k: "Places taken", v: `${academy.enrolled} of ${academy.capacity}` },
+              { k: "Intakes this period", v: academy.programs.toLocaleString("en") },
+              { k: "Places taken", v: `${academy.enrolled.toLocaleString("en")} of ${academy.capacity.toLocaleString("en")}` },
               { k: "Private lessons", v: academy.lessons.toLocaleString("en") },
               { k: "Lesson revenue", v: money(academy.lessonRevenueCents) },
             ].map((row) => (

@@ -12,6 +12,8 @@ import { DEFAULT_LEVELS } from "../src/server/services/levels";
 import { notify, seedNotificationTemplates } from "../src/server/services/notifications";
 import { plainDate } from "../src/lib/time";
 import { seedHistory } from "./seed-history";
+import { seedMembers } from "./seed-members";
+import { seedAcademyHistory } from "./seed-academy-history";
 
 const db = new PrismaClient();
 /** Shared password for every seeded account. Override with SEED_PASSWORD when seeding anything reachable from the internet. */
@@ -351,9 +353,19 @@ async function main() {
   });
   console.log("notifications: done");
 
-  // Twelve weeks of completed bookings, so the dashboard and analytics have a real business to report on.
+  // A membership first: the history below hands its bookings to real player accounts, and sixteen people
+  // making fifteen hundred bookings a month is the first thing anyone notices on the dashboard.
+  const members = await seedMembers(db, DEV_PASSWORD);
+  console.log(members.skipped ? "members: already present" : `members: ${members.created} demo members`);
+
+  // Thirty weeks of trade behind today and a part-sold book ahead of it, so the dashboard and analytics
+  // have a real business to report on.
   const history = await seedHistory(db);
-  console.log(history.skipped ? "history: already present" : `history: ${history.created} past bookings`);
+  console.log(history.skipped ? "history: already present" : `history: ${history.created} bookings`);
+
+  // Finished intakes behind today and the open ones nearly full, so the academy reports on a real roster.
+  const academy = await seedAcademyHistory(db);
+  console.log(academy.skipped ? "academy history: already present" : `academy history: ${academy.programs} intakes, ${academy.enrollments} enrolments`);
 
   console.log(`\nSeed complete. Sign in with any seeded email and the development password defined in prisma/seed.ts.`);
 }

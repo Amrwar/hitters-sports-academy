@@ -16,13 +16,18 @@ import { formatInZone } from "@/lib/time";
 import { count, verbS } from "@/lib/text";
 import type { BookingView } from "@/server/services/bookings";
 
+/** Rows on the dashboard before it stops being a dashboard. */
+const TABLE_ROWS = 8;
+
 type Props = {
   today: BookingView[];
+  /** Server time, so the "next up" cut is the same on both renders and nothing hydrates differently. */
+  now: number;
   stats: { bookingsToday: number; occupancy: number; revenueMtdCents: number; bookingsMtd: number; members: number; unverified: number };
   locations: { id: string; name: string; activeCourts: number; courts: number }[];
 };
 
-export function DashboardView({ today, stats, locations }: Props) {
+export function DashboardView({ today, now, stats, locations }: Props) {
   const router = useRouter();
   const byHour = new Map<number, number>();
   for (const b of today) {
@@ -33,6 +38,14 @@ export function DashboardView({ today, stats, locations }: Props) {
   const hours = Array.from({ length: 17 }, (_, i) => i + 7);
   const maxHour = Math.max(1, ...hours.map((h) => byHour.get(h) ?? 0));
   const byLocation = locations.map((l) => ({ ...l, count: today.filter((b) => b.locationId === l.id && b.status !== "CANCELLED").length }));
+
+  // A busy club runs ninety courts-hours in a day, and printing all of them turns the dashboard into a
+  // report. What a receptionist needs on opening it is the next few arrivals, with the count behind them.
+  const chronological = [...today].sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+  const ahead = chronological.filter((b) => b.status !== "CANCELLED" && new Date(b.endsAt).getTime() >= now);
+  const pool = ahead.length ? ahead : chronological.slice(-TABLE_ROWS);
+  const rows = pool.slice(0, TABLE_ROWS);
+  const more = pool.length - rows.length;
 
   return (
     <AdminShell title="Dashboard" breadcrumb={["Overview", "Dashboard"]} actions={<Button href="/admin/bookings" rightIcon={<ArrowRight />}>Open bookings</Button>}>
@@ -95,7 +108,16 @@ export function DashboardView({ today, stats, locations }: Props) {
       </div>
 
       <Card padding="none" className="mt-5">
-        <CardHeader title="Today's bookings" className="px-5 pt-5" action={<Button variant="link" size="sm" href="/admin/bookings">View all</Button>} />
+        <CardHeader
+          title={ahead.length ? "Next up today" : "Today's bookings"}
+          description={ahead.length ? `${count(ahead.length, "booking")} still to play of ${stats.bookingsToday} today` : `${count(stats.bookingsToday, "booking")} today, all played`}
+          className="px-5 pt-5"
+          action={
+            <Button variant="link" size="sm" href="/admin/bookings">
+              View all
+            </Button>
+          }
+        />
         {today.length === 0 ? (
           <div className="px-5 pb-5">
             <EmptyState compact icon={<CalendarDays />} title="No bookings today" description="New reservations appear here as they come in." action={<Button href="/admin/bookings">Open bookings</Button>} />
@@ -115,7 +137,7 @@ export function DashboardView({ today, stats, locations }: Props) {
                 </TR>
               </THead>
               <TBody>
-                {today.map((b) => (
+                {rows.map((b) => (
                   <TR key={b.id} interactive onClick={() => router.push(`/admin/bookings/${b.id}`)}>
                     <TD className="whitespace-nowrap font-semibold tabular text-fg-muted">{b.confirmationCode}</TD>
                     <TD>
@@ -142,6 +164,14 @@ export function DashboardView({ today, stats, locations }: Props) {
               </TBody>
             </Table>
           </TableWrap>
+        )}
+        {more > 0 && (
+          <div className="border-t border-line/10 px-5 py-3 text-center text-body-sm text-fg-muted">
+            {more.toLocaleString("en")} more {ahead.length ? "later today" : "today"} ·{" "}
+            <Button variant="link" size="sm" href="/admin/bookings">
+              Open the booking list
+            </Button>
+          </div>
         )}
       </Card>
     </AdminShell>

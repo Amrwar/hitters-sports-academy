@@ -130,6 +130,28 @@ export async function getPlayerHistory(actor: Actor | null, profileId: string, t
   return { bookings, matches, training };
 }
 
+export type SeasonStats = { gamesPlayed: number; courtMinutes: number; lessonsTaken: number };
+
+/**
+ * What a player has actually done, for their own home screen. "Assessments: 1" told them nothing; hours on
+ * court and games played are the numbers anyone who plays keeps in their head anyway.
+ *
+ * Counts bookings the player either made or was in the lineup for, so a game someone else booked still
+ * counts as a game they played.
+ */
+export async function getSeasonStats(actor: Actor | null): Promise<SeasonStats> {
+  const a = await requireActor(actor);
+  const party: Prisma.BookingWhereInput = {
+    status: "COMPLETED",
+    OR: [{ playerId: a.id }, { participants: { some: { userId: a.id, status: { in: ["JOINED", "INVITED"] } } } }],
+  };
+  const [courts, lessons] = await Promise.all([
+    db.booking.aggregate({ where: party, _count: { _all: true }, _sum: { durationMinutes: true } }),
+    db.lesson.count({ where: { playerId: a.id, status: "COMPLETED" } }),
+  ]);
+  return { gamesPlayed: courts._count._all, courtMinutes: courts._sum.durationMinutes ?? 0, lessonsTaken: lessons };
+}
+
 export type PlayerHit = { id: string; name: string; level: "A" | "B" | "C" | "D" | null; photoUrl: string | null; homeLocation: string | null };
 
 /** Finds active members by name or email for invitations. Private profiles and the caller are never returned. */

@@ -35,6 +35,7 @@ export default async function AdminDashboardPage() {
   return (
     <DashboardView
       today={today}
+      now={now.getTime()}
       stats={{ bookingsToday: today.filter((b) => b.status !== "CANCELLED").length, occupancy, revenueMtdCents: monthAgg._sum.priceCents ?? 0, bookingsMtd: monthAgg._count._all, members, unverified }}
       locations={locations.map((l) => ({ id: l.id, name: l.name, activeCourts: l.activeCourts, courts: l._count.courts }))}
     />

@@ -16,7 +16,7 @@ import { getLevelDefinitions } from "@/server/services/levels";
 import { MatchReasons, MatchStrength } from "@/components/patterns/match-reasons";
 import { formatInZone } from "@/lib/time";
 import { requireActorOrRedirect } from "@/lib/auth/cookies";
-import { getMyProfile } from "@/server/services/profiles";
+import { getMyProfile, getSeasonStats } from "@/server/services/profiles";
 
 export const metadata = { title: "Home" };
 
@@ -27,14 +27,13 @@ function greeting() {
 
 export default async function PlayerDashboard() {
   const actor = await requireActorOrRedirect("/app");
-  const [profile, upcoming, myGames, found, programs, lessons, levelDefs] = await Promise.all([getMyProfile(actor), listMyBookings(actor, "upcoming"), listMyGames(actor, "upcoming"), findMatches(actor, { take: 2 }).catch(() => null), listPrograms(actor), listMyLessons(actor, "upcoming"), getLevelDefinitions()]);
+  const [profile, upcoming, myGames, found, programs, lessons, levelDefs, season] = await Promise.all([getMyProfile(actor), listMyBookings(actor, "upcoming"), listMyGames(actor, "upcoming"), findMatches(actor, { take: 2 }).catch(() => null), listPrograms(actor), listMyLessons(actor, "upcoming"), getLevelDefinitions(), getSeasonStats(actor)]);
   const recommended = found?.items ?? [];
   const levelLabels = Object.fromEntries(levelDefs.map((l) => [l.level, l.label]));
   const recommendedProgram = programs.find((p) => p.status === "OPEN" && (p.levels.length === 0 || (profile.level ? p.levels.includes(profile.level) : false))) ?? programs[0] ?? null;
-  // Programs are still sample data until the academy phase ships.
   const next = upcoming[0];
   const live = myGames.find((g) => g.status === "IN_PROGRESS") ?? null;
-  const invitations = myGames.filter((g) => g.participants.some((p) => p.userId === actor.id && p.status === "INVITED"));
+  const invitations = myGames.filter((g) => g.id !== live?.id && g.participants.some((p) => p.userId === actor.id && p.status === "INVITED"));
   const nextGame = myGames.find((g) => g.status !== "IN_PROGRESS" && !invitations.includes(g)) ?? null;
 
 
@@ -154,10 +153,10 @@ export default async function PlayerDashboard() {
       </section>
 
       <section>
-        <SectionHeader eyebrow="Your season" title="Progress" />
+        <SectionHeader eyebrow="Your season" title="Time on court" action={<Button variant="link" size="sm" href="/app/profile" rightIcon={<ArrowRight />}>Profile</Button>} />
         <div className="grid grid-cols-3 gap-3">
-          <StatTile label="Level" value={profile.level ?? "—"} />
-          <StatTile label="Assessments" value={profile.assessments.length} />
+          <StatTile label="Games played" value={season.gamesPlayed} />
+          <StatTile label="Hours on court" value={Math.round(season.courtMinutes / 60)} />
           <StatTile label="Home club" value={<span className="text-h4">{profile.homeLocation?.name.replace("HITTERS ", "") ?? "Not set"}</span>} icon={<Trophy />} tone="brand" />
         </div>
       </section>

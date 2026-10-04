@@ -102,8 +102,15 @@ export async function getAnalytics(actor: Actor | null, opts: { weeks?: number; 
       _count: { _all: true },
     }),
     db.program.findMany({
-      where: { ...(scope === "all" ? {} : { locationId: { in: locationIds } }), status: { notIn: ["DRAFT", "CANCELLED"] } },
-      select: { capacity: true, _count: { select: { enrollments: true } }, enrollments: { where: { status: "ENROLLED" }, select: { id: true } } },
+      where: {
+        ...(scope === "all" ? {} : { locationId: { in: locationIds } }),
+        status: { notIn: ["DRAFT", "CANCELLED"] },
+        // Intakes that ran, are running or start inside the window. A finished intake belongs in the
+        // period it ran in, not in every period after it.
+        endsOn: { gte: windowStart },
+        startsOn: { lte: now },
+      },
+      select: { capacity: true, enrollments: { where: { status: { in: ["ENROLLED", "COMPLETED"] } }, select: { id: true } } },
       take: 1_000,
     }),
     db.lesson.aggregate({

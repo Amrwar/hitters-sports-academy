@@ -1,10 +1,11 @@
 /**
- * Twelve weeks of trading history for the demo database.
+ * Thirty weeks of trade behind today and ten days of forward book, for the demo database.
  *
- * The dashboard and the analytics screen read real tables, so with only a handful of future bookings they
- * correctly show almost nothing. This fills in the past: completed bookings spread across every club and
- * court, weighted the way a padel club actually fills (evenings busy, weekends busiest, mornings quiet),
- * with a realistic trickle of cancellations and a few lessons.
+ * The dashboard and the analytics screen read real tables, so on a bare database they correctly show almost
+ * nothing. This fills both directions: completed bookings spread across every club and court, weighted the
+ * way a padel club actually fills (evenings busy, weekends busiest, mornings quiet), with a realistic
+ * trickle of cancellations and a few lessons, and a part-sold book for today and the days ahead so that
+ * "today" is a working day rather than an empty one.
  *
  * It is idempotent: every row it writes carries an HX- confirmation code, and it does nothing if those
  * already exist. Dates are generated relative to today, so the history stays current however long the demo
@@ -14,6 +15,17 @@ import { PrismaClient, type Prisma } from "@prisma/client";
 
 const CODE_PREFIX = "HX-";
 const WEEKS = 30;
+/**
+ * Days of forward book generated as well as the history. Without them the dashboard opens on "3 bookings
+ * today, 1% occupancy" on a database holding thirty weeks of trade, because every generated row is in the
+ * past. Ten days covers today, the week ahead and the edge of the booking window.
+ */
+const FORWARD_DAYS = 10;
+/**
+ * How much of the usual demand is already on the books for a day that has not happened yet. Kept well under
+ * one so the booking grid still has obvious free hours to demonstrate.
+ */
+const FORWARD_FILL = 0.5;
 /** Fraction of generated bookings that were cancelled rather than played. */
 const CANCEL_RATE = 0.07;
 
@@ -59,14 +71,15 @@ export async function seedHistory(db: PrismaClient): Promise<{ created: number; 
   const payments: { code: string; amountCents: number; paid: boolean }[] = [];
   let n = 1;
 
-  for (let dayBack = WEEKS * 7; dayBack >= 1; dayBack--) {
+  for (let dayBack = WEEKS * 7; dayBack >= -FORWARD_DAYS; dayBack--) {
     const day = new Date(now);
     day.setUTCDate(day.getUTCDate() - dayBack);
     day.setUTCHours(0, 0, 0, 0);
     const dow = day.getUTCDay();
     const weekend = dow === 5 || dow === 6; // Friday and Saturday in Egypt
-    // A gentle upward trend, so the charts show a club that is growing rather than flat noise.
-    const growth = 0.75 + (1 - dayBack / (WEEKS * 7)) * 0.5;
+    // A gentle upward trend, so the charts show a club that is growing rather than flat noise. A day still
+    // to come is only part-sold, which is both true of a real book and what leaves slots free to demo.
+    const growth = (0.75 + (1 - Math.max(0, dayBack) / (WEEKS * 7)) * 0.5) * (dayBack <= 0 ? FORWARD_FILL : 1);
 
     for (const location of locations) {
       for (const court of location.courts) {
@@ -86,13 +99,17 @@ export async function seedHistory(db: PrismaClient): Promise<{ created: number; 
           const startsAt = new Date(day.getTime() + (cursorMinutes - 120) * 60_000);
           const endsAt = new Date(startsAt.getTime() + durationMinutes * 60_000);
           cursorMinutes += durationMinutes;
-          if (startsAt >= now) break;
 
+          // In progress counts as upcoming: a game being played right now has not been completed, and the
+          // dashboard's "still to play" list would otherwise show it as finished.
+          const upcoming = endsAt > now;
           const priceCents = Math.round(((hours.priceCents || 40000) * durationMinutes) / 60);
           const cancelled = random() < CANCEL_RATE;
           const playerId = players[Math.floor(random() * players.length)]!.id;
           const confirmationCode = code(n++);
           const fromReception = random() < 0.18;
+          // Booked a few days out, but never in the future: a row ten days ahead was booked recently.
+          const createdAt = new Date(Math.min(now.getTime() - 3_600_000, startsAt.getTime() - 3 * 86_400_000));
 
           rows.push({
             confirmationCode,
@@ -102,14 +119,15 @@ export async function seedHistory(db: PrismaClient): Promise<{ created: number; 
             startsAt,
             endsAt,
             durationMinutes,
-            status: cancelled ? "CANCELLED" : "COMPLETED",
+            status: cancelled ? "CANCELLED" : upcoming ? "CONFIRMED" : "COMPLETED",
             source: fromReception ? "RECEPTION" : "PLAYER_APP",
             priceCents,
             createdById: fromReception ? (staff?.id ?? playerId) : playerId,
-            createdAt: new Date(startsAt.getTime() - 3 * 86_400_000),
-            ...(cancelled ? { cancelledAt: new Date(startsAt.getTime() - 86_400_000), cancelledById: playerId, cancellationReason: "Something came up" } : {}),
+            createdAt,
+            ...(cancelled ? { cancelledAt: new Date(Math.min(now.getTime(), startsAt.getTime() - 86_400_000)), cancelledById: playerId, cancellationReason: "Something came up" } : {}),
           });
-          if (!cancelled) payments.push({ code: confirmationCode, amountCents: priceCents, paid: true });
+          // Courts are paid at the venue, so a booking that has not been played yet is owed, not taken.
+          if (!cancelled) payments.push({ code: confirmationCode, amountCents: priceCents, paid: !upcoming });
         }
       }
     }
@@ -129,7 +147,11 @@ export async function seedHistory(db: PrismaClient): Promise<{ created: number; 
   for (const p of payments) {
     const booking = byCode.get(p.code);
     if (!booking) continue;
-    paymentRows.push({ bookingId: booking.id, amountCents: p.amountCents, status: "PAID", method: random() < 0.5 ? "CASH" : "CARD", paidAt: booking.startsAt });
+    paymentRows.push(
+      p.paid
+        ? { bookingId: booking.id, amountCents: p.amountCents, status: "PAID", method: random() < 0.5 ? "CASH" : "CARD", paidAt: booking.startsAt }
+        : { bookingId: booking.id, amountCents: p.amountCents, status: "PENDING", method: "NONE" },
+    );
     if (booking.playerId) participantRows.push({ bookingId: booking.id, userId: booking.playerId, role: "ORGANIZER" });
   }
   for (let i = 0; i < paymentRows.length; i += 500) await db.payment.createMany({ data: paymentRows.slice(i, i + 500), skipDuplicates: true });
@@ -166,7 +188,7 @@ async function seedPastGames(db: PrismaClient, bookings: { id: string; playerId:
     const full7 = await db.booking.findUnique({ where: { id: booking.id }, select: { locationId: true, courtId: true, startsAt: true, endsAt: true } });
     if (!full7) continue;
     made++;
-    await db.gameSession.create({
+    const session = await db.gameSession.create({
       data: {
         code: `GX-${made.toString(36).toUpperCase().padStart(4, "0")}`,
         bookingId: booking.id,
@@ -193,7 +215,44 @@ async function seedPastGames(db: PrismaClient, bookings: { id: string; playerId:
           })),
         },
       },
+      select: { id: true },
     });
+
+    // One accepted request per player who joined, plus the ones that did not make it. Organisers turn
+    // people down, and a game that filled stops taking requests, so both outcomes belong in the history.
+    const requested = [...lineup].slice(1);
+    const askedAt = new Date(full7.startsAt.getTime() - 5 * 86_400_000);
+    const decidedAt = new Date(full7.startsAt.getTime() - 4 * 86_400_000);
+    const requests: Prisma.GameJoinRequestCreateManyInput[] = requested.map((userId) => ({
+      sessionId: session.id,
+      userId,
+      kind: "SOLO",
+      spots: 1,
+      status: "ACCEPTED",
+      score: 60 + Math.floor(random() * 40),
+      reasons: ["Same official level", "Plays at this club"],
+      decidedById: booking.playerId!,
+      decidedAt,
+      createdAt: askedAt,
+    }));
+    const turnedAway = Math.floor(random() * 3);
+    for (let k = 0; k < turnedAway; k++) {
+      const userId = players[Math.floor(random() * players.length)]!.id;
+      if (lineup.has(userId)) continue;
+      const declined = random() < 0.55;
+      requests.push({
+        sessionId: session.id,
+        userId,
+        kind: "SOLO",
+        spots: 1,
+        status: full ? (declined ? "DECLINED" : "EXPIRED") : "WITHDRAWN",
+        score: 30 + Math.floor(random() * 45),
+        reasons: [declined ? "A level apart" : "Asked after the lineup filled"],
+        ...(declined ? { decidedById: booking.playerId!, decidedAt, decisionNote: "Keeping this one to the level" } : {}),
+        createdAt: askedAt,
+      });
+    }
+    await db.gameJoinRequest.createMany({ data: requests, skipDuplicates: true });
   }
 }
 

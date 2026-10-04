@@ -336,7 +336,7 @@ function SlotGrid({ courts, selected, duration, spanIsFree, onSelect }: { courts
     <div ref={scroller} className="overflow-x-auto no-scrollbar -mx-4 px-4">
       <div className="min-w-max">
         <div className="mb-2 grid gap-1" style={{ gridTemplateColumns: `88px repeat(${columns.length}, 56px)` }}>
-          <div />
+          <div className="sticky -left-4 z-20 -ml-4 bg-canvas pl-4" />
           {columns.map((m) => (
             <div key={m} className="text-center text-[11px] font-semibold tabular text-fg-subtle">
               {minutesToHHMM(m)}
@@ -346,7 +346,7 @@ function SlotGrid({ courts, selected, duration, spanIsFree, onSelect }: { courts
         <div className="space-y-1.5">
           {courts.map((c) => (
             <div key={c.court.id} className="grid items-center gap-1" style={{ gridTemplateColumns: `88px repeat(${columns.length}, 56px)` }}>
-              <div className="pr-2">
+              <div className="sticky -left-4 z-20 -ml-4 bg-canvas py-0.5 pl-4 pr-2 shadow-[6px_0_6px_-6px_rgb(0_0_0/0.5)]">
                 <div className="truncate text-body-sm font-bold">{c.court.name}</div>
                 <div className="text-[11px] capitalize text-fg-subtle">{c.court.type.toLowerCase()}</div>
               </div>
