@@ -17,6 +17,7 @@ import { conflict, notFound, refundNotAllowed, validation } from "@/lib/errors";
 import { requirePermission, type Actor } from "@/lib/auth/authorize";
 import { getPaymentProvider, manualProvider } from "@/lib/payments/provider";
 import { fieldErrors, refundSchema } from "@/lib/validation/schemas";
+import { isChargeLine } from "@/lib/payments/money";
 import { postCreditEntry } from "./credits";
 import { recalculateInvoice, type InvoiceView } from "./invoices";
 import { getPaymentPolicy } from "./payment-policy";
@@ -156,11 +157,20 @@ export async function refundInvoice(actor: Actor | null, invoiceId: string, inpu
 }
 
 /**
- * Refunds everything still refundable, keeping a fee.
+ * Rewrites a cancelled invoice as what the club is actually keeping, and refunds the rest.
  *
- * Used by cancellation policy: the fee stays on the invoice as a FEE line so the receipt explains the
- * difference, and only the rest goes back. A club that keeps money without saying why on the document
- * will be asked about it at the desk.
+ * The original charge is not deleted — a receipt that no longer says what was booked is no use to
+ * anyone — so it stays, with a line beside it cancelling it, and the fee below that. A player reading
+ * the document sees the court they booked, that they did not use it, and exactly what was kept:
+ *
+ *     Court 1 · Tue 10 Nov 19:00 · 90 min      600.00
+ *     Cancelled · court not used              -600.00
+ *     Late cancellation fee                    300.00
+ *                                              ------
+ *                                              300.00
+ *
+ * Whatever was paid above that new total goes back. A fee of nothing produces a total of nothing and a
+ * full refund, which is the ordinary case of cancelling in good time.
  */
 export async function refundWithFee(
   actor: Actor | null,
@@ -168,13 +178,25 @@ export async function refundWithFee(
   input: { feeCents: number; feeDescription: string; reason?: string; destination?: RefundDestination; now?: Date; key?: string },
 ): Promise<InvoiceView> {
   const now = input.now ?? new Date();
-  const invoice = await db.invoice.findUnique({ where: { id: invoiceId }, select: { id: true, paidCents: true, refundedCents: true, lines: { select: { sortOrder: true } } } });
+  const invoice = await db.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { id: true, paidCents: true, refundedCents: true, lines: { select: { kind: true, amountCents: true, sortOrder: true } } },
+  });
   if (!invoice) throw notFound("Invoice");
 
-  if (input.feeCents > 0) {
-    const sortOrder = Math.max(0, ...invoice.lines.map((l) => l.sortOrder)) + 1;
+  // Already settled as a cancellation: do not cancel it twice.
+  const alreadyCancelled = invoice.lines.some((l) => l.kind === "DISCOUNT" && l.amountCents < 0 && l.sortOrder >= 900);
+  if (!alreadyCancelled) {
+    const chargeCents = invoice.lines.filter((l) => isChargeLine(l.kind)).reduce((n, l) => n + l.amountCents, 0);
     await db.$transaction(async (tx) => {
-      await tx.invoiceLine.create({ data: { invoiceId, kind: "FEE", description: input.feeDescription, quantity: 1, unitCents: input.feeCents, amountCents: input.feeCents, sortOrder } });
+      if (chargeCents > 0) {
+        await tx.invoiceLine.create({
+          data: { invoiceId, kind: "DISCOUNT", description: input.feeCents > 0 ? "Cancelled \u00b7 court not used" : "Cancelled", quantity: 1, unitCents: -chargeCents, amountCents: -chargeCents, sortOrder: 900 },
+        });
+      }
+      if (input.feeCents > 0) {
+        await tx.invoiceLine.create({ data: { invoiceId, kind: "FEE", description: input.feeDescription, quantity: 1, unitCents: input.feeCents, amountCents: input.feeCents, sortOrder: 901 } });
+      }
       await recalculateInvoice(tx, invoiceId, now);
     });
   }

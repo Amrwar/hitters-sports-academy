@@ -138,6 +138,7 @@ export async function createInvoice(tx: Prisma.TransactionClient, input: NewInvo
           status: input.issue === false ? "DRAFT" : deriveInvoiceStatus({ ...totals, paidCents: 0, refundedCents: 0, issued: true, voided: false }),
           issuedAt: input.issue === false ? null : now,
           paidAt: input.issue !== false && totals.totalCents === 0 ? now : null,
+          createdAt: now,
           dueAt: input.dueAt ?? null,
           note: input.note ?? null,
           bookingId: input.bookingId ?? null,
@@ -184,9 +185,11 @@ export async function recalculateInvoice(tx: Prisma.TransactionClient, invoiceId
   if (!invoice) throw notFound("Invoice");
 
   const totals = sumLines(invoice.lines);
-  // WAIVED settles the balance without money arriving, so it counts towards paid; a club that comps a
-  // booking should not keep seeing it in "outstanding".
-  const paidCents = invoice.payments.filter((p) => p.status === "PAID" || p.status === "WAIVED" || p.status === "PARTIALLY_REFUNDED").reduce((n, p) => n + p.amountCents, 0);
+  // What arrived, whatever became of it afterwards. REFUNDED is included on purpose: the money did come
+  // in, and the refund is counted separately, so leaving it out would make a fully refunded invoice read
+  // as though it had never been paid. WAIVED counts too, because a comped booking is settled and should
+  // not sit in "outstanding" forever.
+  const paidCents = invoice.payments.filter((p) => ["PAID", "WAIVED", "PARTIALLY_REFUNDED", "REFUNDED"].includes(p.status)).reduce((n, p) => n + p.amountCents, 0);
   const refundedCents = invoice.refunds.filter((r) => r.status === "SUCCEEDED").reduce((n, r) => n + r.amountCents, 0);
   const status = deriveInvoiceStatus({ totalCents: totals.totalCents, paidCents, refundedCents, issued: invoice.issuedAt !== null, voided: invoice.voidedAt !== null });
 

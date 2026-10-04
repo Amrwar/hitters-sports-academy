@@ -389,14 +389,18 @@ async function assertCanChange(a: Actor, booking: BookingView, now: Date, verb: 
  *   back. A club that keeps money without a line explaining it gets asked about it at the desk.
  * - Cancelled inside the no-refund window: the whole amount is kept, again as a line on the document.
  *
- * Staff cancelling on a player's behalf never charge a fee: the club changed its mind, not the player.
+ * A late fee is charged whoever cancels, including a receptionist doing it for a player who rang up,
+ * because the player is still the one who changed their mind. A club cancelling its own booking waives
+ * it explicitly: nothing in the actor distinguishes "the court flooded" from "they called to cancel",
+ * so the person at the desk says which it is.
+ *
  * Failures are swallowed deliberately — a refund that cannot be reached must not leave a booking the
  * player thinks is cancelled still sitting on a court.
  */
 async function settleCancelledBooking(
   actor: Actor,
   booking: BookingView,
-  opts: { now: Date; staff: boolean; noShow: boolean; reason: string | null },
+  opts: { now: Date; staff: boolean; noShow: boolean; reason: string | null; waiveFee?: boolean },
 ): Promise<{ feeCents: number; refundedCents: number }> {
   const invoice = await db.invoice.findFirst({ where: { bookingId: booking.id, voidedAt: null }, select: { id: true, totalCents: true, paidCents: true, refundedCents: true } });
   if (!invoice) return { feeCents: 0, refundedCents: 0 };
@@ -408,12 +412,12 @@ async function settleCancelledBooking(
     return { feeCents: 0, refundedCents: 0 };
   }
 
-  // A club cancelling its own booking does not charge the player for it.
-  const byClub = opts.staff && booking.playerId !== actor.id;
+  // Only staff may waive the fee, and only by saying so.
+  const waived = !!opts.waiveFee && opts.staff;
   const policy = await getPaymentPolicy(booking.locationId);
   const cutoffHours = booking.location.bookingPolicy?.cancellationCutoffHours ?? 12;
   const hoursBeforeStart = (booking.startsAt.getTime() - opts.now.getTime()) / 3_600_000;
-  const charge = byClub
+  const charge = waived
     ? { chargeCents: 0, refundCents: paid, reason: null }
     : cancellationCharge({ policy, totalCents: paid, hoursBeforeStart, cancellationCutoffHours: cutoffHours, noShow: opts.noShow });
 
@@ -441,7 +445,7 @@ export async function cancelBooking(actor: Actor | null, bookingId: string, inpu
   const booking = await loadBooking(bookingId);
   const { staff } = await assertCanChange(a, booking, now, "cancel");
 
-  const settlement = await settleCancelledBooking(a, booking, { now, staff, noShow: false, reason: parsed.data.reason ?? null });
+  const settlement = await settleCancelledBooking(a, booking, { now, staff, noShow: false, reason: parsed.data.reason ?? null, waiveFee: parsed.data.waiveFee });
 
   let game = null as GameCascade | null;
   const updated = await db.$transaction(async (tx) => {
@@ -449,7 +453,7 @@ export async function cancelBooking(actor: Actor | null, bookingId: string, inpu
     // Anything still owed is cancelled; what was paid has already been dealt with by the policy above.
     await tx.payment.updateMany({ where: { bookingId, status: "PENDING" }, data: { status: "CANCELLED" } });
     game = await cancelGameForBooking(tx, bookingId, a.id, now);
-    await audit({ actorId: a.id, action: "booking.cancelled", entityType: "Booking", entityId: bookingId, locationId: booking.locationId, metadata: { byStaff: staff && booking.playerId !== a.id, reason: parsed.data.reason, feeCents: settlement.feeCents, refundedCents: settlement.refundedCents } }, tx);
+    await audit({ actorId: a.id, action: "booking.cancelled", entityType: "Booking", entityId: bookingId, locationId: booking.locationId, metadata: { byStaff: staff && booking.playerId !== a.id, reason: parsed.data.reason, waiveFee: parsed.data.waiveFee, feeCents: settlement.feeCents, refundedCents: settlement.refundedCents } }, tx);
     return tx.booking.findUniqueOrThrow({ where: { id: bookingId }, select: bookingSelect });
   });
   if (booking.playerId && booking.playerId !== a.id) {

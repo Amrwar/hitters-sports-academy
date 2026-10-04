@@ -341,7 +341,15 @@ export const createBookingSchema = bookingRequestSchema.extend({
   participantIds: z.array(z.string().cuid()).max(3).optional(),
 });
 
-export const cancelBookingSchema = z.object({ reason: z.string().trim().max(500).optional().or(z.literal("").transform(() => undefined)) });
+export const cancelBookingSchema = z.object({
+  reason: z.string().trim().max(500).optional().or(z.literal("").transform(() => undefined)),
+  /**
+   * Staff only. Cancelling on a player's behalf still charges the club's late fee, because the player
+   * is the one who changed their mind; a club cancelling its own booking ticks this instead. Nothing
+   * in the actor tells the two apart, so the person at the desk says which it is.
+   */
+  waiveFee: z.coerce.boolean().default(false),
+});
 
 export const recordPaymentSchema = z.object({
   method: z.enum(["CASH", "CARD", "WALLET"]),
