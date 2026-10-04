@@ -93,7 +93,8 @@ export async function seedMoney(db: PrismaClient): Promise<{ plans: number; memb
   const players = await db.user.findMany({ where: { status: "ACTIVE", globalRole: null, playerProfile: { isNot: null } }, select: { id: true }, orderBy: { createdAt: "asc" } });
   const existingMembers = new Set((await db.membership.findMany({ select: { playerId: true } })).map((m) => m.playerId));
 
-  let members = 0;
+  let members = await db.membership.count({ where: { code: { startsWith: "MB-SEED" } } });
+  const seededBefore = members;
   for (const player of players) {
     if (existingMembers.has(player.id)) continue;
     if (random() > 0.17) continue;
@@ -160,11 +161,11 @@ export async function seedMoney(db: PrismaClient): Promise<{ plans: number; memb
   }
 
   const invoices = await backfillBookingInvoices(db, random);
-  return { plans: plans.length, members, coupons: COUPONS.length, invoices };
+  return { plans: plans.length, members: members - seededBefore, coupons: COUPONS.length, invoices };
 }
 
 /**
- * Raises an invoice for each generated booking that has none.
+ * Raises an invoice for every booking that has none.
  *
  * The status mirrors the booking's own payment, so the finance screens show the same mix of paid,
  * outstanding and refunded that the booking screens already do. Done in chunks because a demo database
@@ -172,7 +173,9 @@ export async function seedMoney(db: PrismaClient): Promise<{ plans: number; memb
  */
 async function backfillBookingInvoices(db: PrismaClient, random: () => number): Promise<number> {
   const bookings = await db.booking.findMany({
-    where: { invoices: { none: {} }, confirmationCode: { startsWith: "HX-" } },
+    // Every booking without one, not only the generated history: the demo accounts' own bookings need to
+    // appear on their billing page too.
+    where: { invoices: { none: {} } },
     select: {
       id: true,
       playerId: true,
@@ -190,7 +193,9 @@ async function backfillBookingInvoices(db: PrismaClient, random: () => number): 
   });
   if (bookings.length === 0) return 0;
 
-  let n = 0;
+  // Numbered from what is already there: a second pass over new bookings must not reuse numbers, or
+  // createMany skips the invoice as a duplicate and its lines are left pointing at nothing.
+  let n = await db.invoice.count({ where: { number: { startsWith: "HT-BK-" } } });
   const lines: Prisma.InvoiceLineCreateManyInput[] = [];
   const invoiceRows: Prisma.InvoiceCreateManyInput[] = [];
   const paymentUpdates: { id: string; invoiceId: string }[] = [];
@@ -230,14 +235,19 @@ async function backfillBookingInvoices(db: PrismaClient, random: () => number): 
   }
 
   for (let i = 0; i < invoiceRows.length; i += 500) await db.invoice.createMany({ data: invoiceRows.slice(i, i + 500), skipDuplicates: true });
-  for (let i = 0; i < lines.length; i += 500) await db.invoiceLine.createMany({ data: lines.slice(i, i + 500), skipDuplicates: true });
+  // Only lines whose invoice actually landed: a skipped duplicate would leave these orphaned.
+  const landed = new Set((await db.invoice.findMany({ where: { id: { in: invoiceRows.map((r) => r.id as string) } }, select: { id: true } })).map((r) => r.id));
+  const safeLines = lines.filter((l) => landed.has(l.invoiceId));
+  for (let i = 0; i < safeLines.length; i += 500) await db.invoiceLine.createMany({ data: safeLines.slice(i, i + 500), skipDuplicates: true });
   // Point the existing payments at their invoice so the finance screen and the booking screen agree.
   for (const chunk of chunked(paymentUpdates, 200)) {
     await Promise.all(chunk.map((u) => db.payment.update({ where: { id: u.id }, data: { invoiceId: u.invoiceId } })));
   }
 
-  // A handful of refunds, so the refund panel reports on something real.
-  const refundable = invoiceRows.filter((r) => r.status === "PAID").filter(() => random() < 0.01);
+  // A handful of refunds, so the refund panel reports on something real. Taken from the recent end: a
+  // report on the last eight weeks is not helped by refunds from thirty weeks ago.
+  const paidRows = invoiceRows.filter((r) => r.status === "PAID");
+  const refundable = paidRows.slice(-Math.min(paidRows.length, 1500)).filter(() => random() < 0.03);
   for (const r of refundable.slice(0, 40)) {
     const amountCents = Math.round((r.totalCents as number) * (random() < 0.5 ? 1 : 0.5));
     await db.refund.create({
@@ -254,7 +264,7 @@ async function backfillBookingInvoices(db: PrismaClient, random: () => number): 
     });
     await db.invoice.update({ where: { id: r.id as string }, data: { refundedCents: amountCents, status: amountCents >= (r.totalCents as number) ? "REFUNDED" : "PART_PAID" } });
   }
-  return n;
+  return invoiceRows.length;
 }
 
 function* chunked<T>(items: T[], size: number): Generator<T[]> {

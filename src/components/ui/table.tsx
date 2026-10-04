@@ -34,7 +34,9 @@ export function TR({ className, interactive, ...rest }: HTMLAttributes<HTMLTable
 }
 
 export function TH({ className, ...rest }: ThHTMLAttributes<HTMLTableCellElement>) {
-  return <th className={cn("h-11 whitespace-nowrap px-4 text-overline uppercase text-fg-subtle first:pl-5 last:pr-5", className)} {...rest} />;
+  // bg-surface-2 again here, not only on the thead: a sticky thead paints nothing of its own, so without
+  // an opaque cell the rows scrolling underneath show through the column labels.
+  return <th className={cn("h-11 whitespace-nowrap bg-surface-2 px-4 text-overline uppercase text-fg-subtle first:pl-5 last:pr-5", className)} {...rest} />;
 }
 
 export function TD({ className, numeric, ...rest }: TdHTMLAttributes<HTMLTableCellElement> & { numeric?: boolean }) {

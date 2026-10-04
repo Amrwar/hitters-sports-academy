@@ -90,6 +90,10 @@ const groups: { label: string; items: { href: string; label: string; icon: typeo
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const deepest = groups
+    .flatMap((g) => g.items.map((i) => i.href))
+    .filter((href) => (href === "/admin" ? pathname === "/admin" : pathname === href || pathname.startsWith(`${href}/`)))
+    .sort((a, b) => b.length - a.length)[0];
   return (
     <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-4" aria-label="Admin">
       {groups.map((g) => (
@@ -97,7 +101,8 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
           <div className="mb-1.5 px-3 text-overline uppercase text-blue-300/70">{g.label}</div>
           <ul className="space-y-0.5">
             {g.items.map(({ href, label, icon: Icon, badge }) => {
-              const active = href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+              // Deepest match wins: /admin/finance/invoices lights Invoices, not Finance as well.
+              const active = href === deepest;
               return (
                 <li key={href}>
                   <Link

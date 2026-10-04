@@ -58,7 +58,7 @@ export function BillingView({ invoices, statement, onlineAvailable, allowCredit 
           <div className={cn("text-caption uppercase tracking-wider", owedCents > 0 ? "text-white/80" : "text-fg-subtle")}>{owedCents > 0 ? "To pay" : "Nothing owed"}</div>
           <div className="mt-1 text-display tabular">{money(owedCents)}</div>
           <div className={cn("mt-1 text-body-sm", owedCents > 0 ? "text-white/85" : "text-fg-muted")}>
-            {owedCents > 0 ? `Across ${count(owed.length, "booking or purchase")}. Pay at the club, or here if your club takes card.` : "Everything you have booked is settled."}
+            {owedCents > 0 ? `Across ${count(owed.length, "unpaid invoice")}. Pay at the club, or here if your club takes card.` : "Everything you have booked is settled."}
           </div>
           {statement.balanceCents > 0 && (
             <div className={cn("mt-4 flex items-center gap-2 rounded-md px-3 py-2 text-body-sm", owedCents > 0 ? "bg-white/15" : "bg-surface-2")}>

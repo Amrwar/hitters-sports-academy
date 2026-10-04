@@ -9,7 +9,7 @@ import { StatTile } from "@/components/ui/misc";
 import { EmptyState } from "@/components/ui/states";
 import { TBody, TD, TH, THead, TR, Table, TableWrap } from "@/components/ui/table";
 import { money } from "@/components/patterns/booking-status";
-import { count } from "@/lib/text";
+import { count, verbS } from "@/lib/text";
 import { shortDate } from "@/lib/time";
 import { cn } from "@/lib/cn";
 import type { FinanceReport } from "@/server/services/finance";
@@ -147,7 +147,7 @@ export function FinanceView({ report, weeks, locationId }: { report: FinanceRepo
             <StatTile label="Packages sold" value={packages.sold} icon={<Package />} delta={{ value: money(packages.revenueCents) }} />
             <StatTile label="Credits owed" value={packages.creditsOutstanding} delta={{ value: "lessons", positive: true }} />
           </div>
-          {memberships.expiringSoon > 0 && <p className="mt-4 text-body-sm text-warning">{count(memberships.expiringSoon, "membership")} ends within 30 days and will not renew.</p>}
+          {memberships.expiringSoon > 0 && <p className="mt-4 text-body-sm text-warning">{count(memberships.expiringSoon, "membership")} {verbS(memberships.expiringSoon, "end")} within 30 days and will not renew.</p>}
           {totals.creditLiabilityCents > 0 && <p className="mt-2 text-body-sm text-fg-muted">The academy holds {money(totals.creditLiabilityCents)} of member credit, which is a liability, not income.</p>}
         </Card>
       </div>

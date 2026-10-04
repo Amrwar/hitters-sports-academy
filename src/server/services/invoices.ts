@@ -58,9 +58,10 @@ export const invoiceSelect = {
 
 export type InvoiceView = Prisma.InvoiceGetPayload<{ select: typeof invoiceSelect }> & { amountDueCents: number };
 
-const decorate = <T extends { totalCents: number; paidCents: number; refundedCents: number }>(row: T): T & { amountDueCents: number } => ({
+/** A voided invoice is owed nothing, whatever its lines still say it was for. */
+const decorate = <T extends { totalCents: number; paidCents: number; refundedCents: number; voidedAt?: Date | null; status?: InvoiceStatus }>(row: T): T & { amountDueCents: number } => ({
   ...row,
-  amountDueCents: amountDue(row),
+  amountDueCents: row.voidedAt || row.status === "VOID" ? 0 : amountDue(row),
 });
 
 /* ------------------------------------------------------------------ Numbering */
