@@ -126,7 +126,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "notification.send",
     "audit.read",
   ],
-  RECEPTIONIST: ["users.read", "profile.read.any", "assessment.read", "assessment.schedule", "training.read", "location.read", "court.read", "staff.read", "booking.read", "booking.manage", "payment.manage", "session.read", "session.manage", "trainer.read", "lesson.read", "lesson.manage", "package.manage", "message.moderate", "notification.send"],
+  RECEPTIONIST: ["users.read", "profile.read.any", "assessment.read", "assessment.schedule", "training.read", "location.read", "court.read", "staff.read", "finance.read", "booking.read", "booking.manage", "payment.manage", "session.read", "session.manage", "trainer.read", "lesson.read", "lesson.manage", "package.manage", "message.moderate", "notification.send"],
   TRAINER: ["users.read", "profile.read.any", "assessment.read", "training.read", "training.record", "location.read", "court.read", "booking.read", "session.read", "trainer.read", "trainer.self", "message.participate"],
   ASSESSOR: ["users.read", "profile.read.any", "assessment.read", "assessment.create", "assessment.schedule", "training.read", "location.read", "court.read", "session.read", "trainer.read"],
   FINANCE_MANAGER: ["users.read", "location.read", "court.read", "finance.read", "finance.manage", "refund.issue", "booking.read", "payment.manage", "session.read", "trainer.read", "lesson.read", "package.manage", "audit.read"],

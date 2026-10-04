@@ -38,6 +38,7 @@ import { Input } from "@/components/ui/input";
 import { Dropdown } from "@/components/ui/dropdown";
 import { Badge } from "@/components/ui/badge";
 import { useAdminActor } from "./admin-actor";
+import { ADMIN_NAV_PERMISSIONS } from "@/lib/auth/admin-nav";
 import { logoutAction } from "@/server/actions/auth";
 
 const groups: { label: string; items: { href: string; label: string; icon: typeof Users; badge?: string }[] }[] = [
@@ -90,13 +91,19 @@ const groups: { label: string; items: { href: string; label: string; icon: typeo
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
-  const deepest = groups
+  const { navHrefs } = useAdminActor();
+  // An href with no permission entry is open to every staff member; everything else has to be earned.
+  const allowed = new Set(navHrefs);
+  const visible = groups
+    .map((g) => ({ ...g, items: g.items.filter((i) => !(i.href in ADMIN_NAV_PERMISSIONS) || allowed.has(i.href)) }))
+    .filter((g) => g.items.length > 0);
+  const deepest = visible
     .flatMap((g) => g.items.map((i) => i.href))
     .filter((href) => (href === "/admin" ? pathname === "/admin" : pathname === href || pathname.startsWith(`${href}/`)))
     .sort((a, b) => b.length - a.length)[0];
   return (
     <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 py-4" aria-label="Admin">
-      {groups.map((g) => (
+      {visible.map((g) => (
         <div key={g.label}>
           <div className="mb-1.5 px-3 text-overline uppercase text-blue-300/70">{g.label}</div>
           <ul className="space-y-0.5">

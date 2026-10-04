@@ -14,6 +14,12 @@ export type AdminActor = {
   unread: number;
   /** Reported messages still waiting for a decision at their clubs. */
   openReports: number;
+  /**
+   * The admin pages this person may actually open, worked out on the server where the permission matrix
+   * lives. The sidebar shows these and nothing else: offering a page someone cannot open is how a coach
+   * ends up on an error screen having clicked something the application put in front of them.
+   */
+  navHrefs: string[];
 };
 
 const Ctx = createContext<AdminActor | null>(null);

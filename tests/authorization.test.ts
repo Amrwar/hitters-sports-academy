@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { accessibleLocationIds, can, type Actor } from "@/lib/auth/authorize";
 import { DEFAULT_ROLE_PERMISSIONS, PERMISSIONS } from "@/lib/auth/permissions";
+import { ADMIN_NAV_PERMISSIONS } from "@/lib/auth/admin-nav";
 import * as locations from "@/server/services/locations";
 import * as courts from "@/server/services/courts";
 import * as staff from "@/server/services/staff";
@@ -74,6 +75,42 @@ describe("locations", () => {
   let w: World;
   beforeEach(async () => {
     w = await world();
+  });
+
+  it("the sidebar only offers pages the person can open", async () => {
+    // The map the admin layout reads to build the sidebar. A coach offered Finance lands on an error page
+    // the application put in front of them, which is the bug this guards.
+    const allowed = async (actor: Actor) => {
+      const out: string[] = [];
+      for (const [href, permissions] of Object.entries(ADMIN_NAV_PERMISSIONS)) {
+        for (const permission of permissions) {
+          if (await can(actor, permission)) {
+            out.push(href);
+            break;
+          }
+        }
+      }
+      return out;
+    };
+
+    const coach = await allowed(w.trainerA.actor);
+    expect(coach).toContain("/admin/coaching");
+    expect(coach).not.toContain("/admin/finance");
+    expect(coach).not.toContain("/admin/memberships");
+    expect(coach).not.toContain("/admin/coupons");
+    expect(coach).not.toContain("/admin/staff");
+
+    // The desk takes money, so it needs the invoice behind it; deciding a refund is still a manager's job.
+    const desk = await allowed(w.receptionA.actor);
+    expect(desk).toContain("/admin/finance/invoices");
+    expect(await can(w.receptionA.actor, "refund.issue", { locationId: w.A.id })).toBe(false);
+    expect(desk).not.toContain("/admin/coaching");
+
+    const manager = await allowed(w.managerA.actor);
+    expect(manager).toEqual(expect.arrayContaining(["/admin/finance", "/admin/coaching", "/admin/staff", "/admin/locations"]));
+
+    const owner = await allowed(w.owner.actor);
+    expect(owner.length).toBe(Object.keys(ADMIN_NAV_PERMISSIONS).length);
   });
 
   it("only global roles create locations", async () => {
