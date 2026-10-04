@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarCheck, Clock, MapPin, Receipt } from "lucide-react";
 import { PageHeader } from "@/components/nav/player-nav";
@@ -296,20 +296,44 @@ export function BookingFlow({ locations, initialLocationId, rescheduling, emailV
 
 const CELL: Record<Slot["status"], string> = {
   available: "border-line/10 bg-surface-2 text-fg-muted hover:border-blue-400/60 hover:text-fg",
-  booked: "border-transparent bg-line/[0.05] text-fg-subtle/50 line-through",
-  past: "border-transparent bg-line/[0.03] text-fg-subtle/30",
-  too_soon: "border-transparent bg-line/[0.03] text-fg-subtle/40",
-  outside_window: "border-dashed border-line/10 text-fg-subtle/40",
+  booked: "border-transparent bg-line/[0.06] text-fg-subtle/60",
+  past: "border-transparent bg-line/[0.03] text-fg-subtle/35",
+  too_soon: "border-transparent bg-line/[0.03] text-fg-subtle/45",
+  outside_window: "border-dashed border-line/10 text-fg-subtle/45",
   closed: "border-warning/20 bg-warning/5 text-warning/60",
   maintenance: "border-warning/20 bg-warning/5 text-warning/50",
-  inactive: "border-transparent text-fg-subtle/30",
-  location_closed: "border-transparent text-fg-subtle/30",
+  inactive: "border-transparent bg-line/[0.02] text-fg-subtle/35",
+  location_closed: "border-transparent bg-line/[0.02] text-fg-subtle/35",
+};
+
+/** What an unbookable cell shows. An empty cell reads as a failed render; a mark reads as "not this one". */
+const CELL_MARK: Partial<Record<Slot["status"], string>> = {
+  booked: "·",
+  past: "·",
+  too_soon: "·",
+  outside_window: "·",
+  inactive: "·",
+  location_closed: "·",
+  closed: "!",
+  maintenance: "!",
 };
 
 function SlotGrid({ courts, selected, duration, spanIsFree, onSelect }: { courts: LocationSchedule["courts"]; selected: { courtId: string; startMinutes: number } | null; duration: number; spanIsFree: (c: LocationSchedule["courts"][number], start: number, dur: number) => boolean; onSelect: (courtId: string, startMinutes: number) => void }) {
   const columns = [...new Set(courts.flatMap((c) => c.slots.map((s) => s.startMinutes)))].sort((a, b) => a - b);
+  const scroller = useRef<HTMLDivElement>(null);
+
+  // The first hour anyone can still book. On an afternoon visit that sits far right of the opening hour,
+  // so without this the grid opens on a screen of hours that have already gone.
+  const firstBookable = columns.findIndex((m) => courts.some((c) => c.slots.find((x) => x.startMinutes === m)?.status === "available"));
+
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || firstBookable < 1) return;
+    el.scrollLeft = Math.max(0, (firstBookable - 1) * 60); // 56px column + 4px gap, keeping one column of context
+  }, [firstBookable, courts]);
+
   return (
-    <div className="overflow-x-auto no-scrollbar -mx-4 px-4">
+    <div ref={scroller} className="overflow-x-auto no-scrollbar -mx-4 px-4">
       <div className="min-w-max">
         <div className="mb-2 grid gap-1" style={{ gridTemplateColumns: `88px repeat(${columns.length}, 56px)` }}>
           <div />
@@ -348,7 +372,7 @@ function SlotGrid({ courts, selected, duration, spanIsFree, onSelect }: { courts
                       s.booking?.mine && "border-volt/50 text-volt",
                     )}
                   >
-                    {isSel ? "✓" : s.booking?.mine ? "You" : s.status === "booked" ? "—" : s.status === "available" && s.priceCents != null ? Math.round(s.priceCents / 100) : s.status === "closed" || s.status === "maintenance" ? "!" : ""}
+                    {isSel ? "✓" : s.booking?.mine ? "You" : s.status === "available" && s.priceCents != null ? Math.round(s.priceCents / 100) : (CELL_MARK[s.status] ?? "")}
                   </button>
                 );
               })}
@@ -356,10 +380,11 @@ function SlotGrid({ courts, selected, duration, spanIsFree, onSelect }: { courts
           ))}
         </div>
         <div className="mt-3 flex flex-wrap gap-4 text-caption text-fg-muted">
-          <Legend className="border-line/10 bg-surface-2" label="Available (EGP/h)" />
-          <Legend className="border-blue-300/60 bg-brand-gradient" label="Selected" />
-          <Legend className="border-transparent bg-line/[0.08]" label="Booked" />
-          <Legend className="border-warning/20 bg-warning/10" label="Closed" />
+          <Legend className="border-line/10 bg-surface-2" label="Available, price in EGP" />
+          <Legend className="border-blue-300/60 bg-brand-gradient" label="Your selection" />
+          <Legend className="border-volt/50 bg-surface-2" label="Already yours" />
+          <Legend className="border-transparent bg-line/[0.08]" label="Taken or gone" />
+          <Legend className="border-warning/20 bg-warning/10" label="Court closed" />
         </div>
       </div>
     </div>
