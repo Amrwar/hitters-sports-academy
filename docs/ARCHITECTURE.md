@@ -247,3 +247,106 @@ confirmation dialog reads "Saturday 11 October" rather than 2026-10-11.
 Terminology is consistent: game not session, organizer not organiser, enrollment not enrolment, "your clubs"
 not "your scope". Roadmap notes and engineering voice are gone from buyer-visible panels. Every route sets a
 browser tab title.
+
+## Phase 11 — The financial system
+
+Money is modelled as five separate things, because conflating any two of them loses information a club
+needs at the end of the month.
+
+| Concept | Model | What it means |
+| --- | --- | --- |
+| Invoice | `Invoice` + `InvoiceLine` | What is owed, and the only place "outstanding" is computed |
+| Payment | `Payment` | Money that arrived, and how |
+| Refund | `Refund` | Money that went back, with its own lifecycle and authorisation |
+| Credit | `CreditAccount` + `CreditEntry` | Money the club holds on a player's behalf, as an append-only ledger |
+| Membership | `MembershipPlan` + `Membership` | A dated term on a plan, with the benefits it carries |
+
+A booking, a lesson, an enrolment, a package, a membership and a player's share of a split game all become
+an invoice. That is what lets one finance screen report on all of them and one refund path serve all of
+them.
+
+### Derived figures have exactly one writer
+
+`Invoice.subtotalCents / discountCents / creditCents / totalCents / paidCents / refundedCents / status` are
+caches. `recalculateInvoice` is the only function that writes them, and it runs inside the same transaction
+as every change that can move them. A figure written anywhere else is a figure that will disagree with the
+ledger by the end of the month.
+
+`paidCents` means money that arrived, including payments later refunded — the refund is counted separately.
+`WAIVED` counts as paid, because a comped booking is settled and should not sit in "outstanding" forever.
+
+### The browser is never believed
+
+`startOnlinePayment` returns somewhere to send the player and nothing else. An intent reaches `SUCCEEDED`
+only through `settleIntent`, which runs from a signature-verified webhook or from `reconcileIntent`, which
+asks the provider's own API. A page that says "payment complete" is a claim, not a fact.
+
+`POST /api/payments/webhook/[provider]` reads the request as raw text and passes the bytes through
+untouched — parsing and re-serialising would change them, and every signature scheme signs the bytes. The
+handler stores them, verifies the signature, refuses a replay on the provider's own event id, and only then
+settles anything. A provider that retries ten times pays the invoice once.
+
+### Idempotency everywhere
+
+Every payment carries a unique `idempotencyKey`, every refund carries one, and `PaymentIntent` carries the
+key it sent to the provider. `WebhookEvent` is unique on `(provider, eventId)`. A retried request, a
+double-tapped button and a webhook delivered three times all resolve to the same single row.
+
+### No card data, ever
+
+`provider` and `providerRef` are the only link to a gateway. A PAN, CVV or expiry date must never be passed
+to, stored by, or logged from any of this; every supported gateway collects the instrument on its own page
+or in its own iframe, which is also what keeps the academy out of PCI scope.
+
+### No provider is hardcoded
+
+`src/lib/payments/provider.ts` defines `PaymentProvider`: create an intent, fetch its real status, refund,
+verify a webhook, parse an event. Egypt's realistic options (Paymob, Fawry, Kashier, Geidea, Tap) differ in
+their APIs and agree on that shape, so adding one means writing one adapter and nothing else.
+
+`manual` — taking the money at the desk — is implemented and always registered. `PAYMENT_PROVIDER` names
+the gateway; unset, `onlineProvider()` returns null and online payment is simply unavailable rather than
+quietly falling back to something else, and a club's policy is downgraded to pay-at-club rather than
+breaking.
+
+### Configurable policy
+
+`PaymentPolicy` with a null `locationId` is the academy default; a row per club overrides it. It carries
+when money is taken (`AT_CLUB` / `ONLINE` / `BOTH`), the deposit percentage, what is kept on a late
+cancellation and on a no-show, where refunds go, the no-refund window, how a game's cost is divided by
+default, and whether credit may be spent.
+
+Cancelling a paid booking rewrites the invoice as what the club is actually keeping: the original charge
+stays, a line beside it says the court was not used, and the fee sits below. The receipt still explains
+what was booked and what was kept. Staff waive the fee explicitly — nothing in the actor distinguishes
+"the court flooded" from "they called to cancel".
+
+### Splitting a game
+
+`shareBreakdown` divides to the piastre: EGP 175 across four players is 44, 44, 44 and 43, not four times
+43.75 rounded up, which would overcharge the group every game. Shares are invoiced when the lineup is
+confirmed, and the organizer's booking invoice is voided when the split replaces it — unless they have
+already paid it, in which case it stands and only the others are billed.
+
+### Permissions added
+
+`finance.read` and `finance.manage` existed with nothing behind them. `refund.issue` is new and deliberately
+separate: a receptionist takes money, a manager decides refunds. `invoice.read.own` and
+`membership.buy.own` are the player side.
+
+### Screens
+
+Admin: `/admin/finance` (invoiced against collected, how people paid, what the money was for, what is owed
+oldest first, refunds, by club, which providers are connected), `/admin/finance/invoices` and its detail
+page (take payment, refund, void, apply a code, movement history), `/admin/memberships`, `/admin/coupons`,
+and the payment policy in `/admin/settings`.
+
+Player: `/app/billing` (what is owed, account credit, receipts), `/app/billing/[number]` (the receipt, with
+paying online or from credit), `/app/membership`.
+
+### Tests
+
+`tests/payments.test.ts`, 66 cases, weighted towards the things a real gateway only does occasionally: a
+webhook delivered three times, a signature that does not verify, a webhook for an unknown attempt, an
+unreachable gateway, a refund the provider refuses, a reconciliation racing a webhook, two credit spends at
+once, and a coupon on its last redemption.
