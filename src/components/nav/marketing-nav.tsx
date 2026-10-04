@@ -10,8 +10,9 @@ import { Button, IconButton } from "@/components/ui/button";
 const links = [
   { href: "/#locations", label: "Locations" },
   { href: "/#play", label: "Play" },
-  { href: "/#academy", label: "Academy" },
   { href: "/#how", label: "How it works" },
+  { href: "/#academy", label: "Academy" },
+  { href: "/#coaches", label: "Coaches" },
   { href: "/#membership", label: "Membership" },
 ];
 
@@ -87,7 +88,8 @@ const footerColumns: { title: string; items: { label: string; href: string }[] }
       { label: "Programs", href: "/app/programs" },
       { label: "Private coaching", href: "/app/trainers" },
       { label: "Training packages", href: "/app/packages" },
-      { label: "Levels A to D", href: "/#play" },
+      { label: "Open intakes", href: "/#programs" },
+      { label: "The coaches", href: "/#coaches" },
     ],
   },
   {
@@ -95,6 +97,7 @@ const footerColumns: { title: string; items: { label: string; href: string }[] }
     items: [
       { label: "Locations", href: "/app/locations" },
       { label: "Membership", href: "/#membership" },
+      { label: "Common questions", href: "/#faq" },
       { label: "Create an account", href: "/register" },
       { label: "Sign in", href: "/login" },
     ],

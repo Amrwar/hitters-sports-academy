@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { ArrowRight, CalendarCheck, ClipboardCheck, GraduationCap, LayoutDashboard, LayoutGrid, MapPin, Search, ShieldCheck, Swords, Users, Zap } from "lucide-react";
+import { ArrowRight, CalendarCheck, ChevronDown, ClipboardCheck, GraduationCap, LayoutDashboard, LayoutGrid, MapPin, Search, ShieldCheck, Swords, Users, Zap } from "lucide-react";
 import { Lockup, Monogram } from "@/components/brand/Logo";
 import { MarketingFooter, MarketingNav } from "@/components/nav/marketing-nav";
 import { Button } from "@/components/ui/button";
@@ -9,17 +9,29 @@ import { CourtBackdrop } from "@/components/patterns/cards";
 import { count } from "@/lib/text";
 import { money } from "@/components/patterns/booking-status";
 import { listPublicLocations } from "@/server/services/locations";
+import { getSiteContent, type SiteContent } from "@/server/services/public-site";
+import { Avatar } from "@/components/ui/avatar";
+import { programCategoryLabel } from "@/lib/catalog";
+import { shortDate } from "@/lib/time";
+import { pluralize } from "@/lib/text";
+import { cn } from "@/lib/cn";
 
 export const dynamic = "force-dynamic";
 
 const PHOTOS = ["/brand/court-net.jpg", "/brand/court-rackets.jpg", "/brand/court-line.jpg", "/brand/court-handles.jpg"];
 
 export default async function LandingPage() {
-  // The clubs, court counts and prices below are the live ones, so the site is never out of date with the app.
-  const clubs = await listPublicLocations().catch(() => []);
+  // Everything on this page is read from the live tables, so the site is never out of date with the academy
+  // it is selling. A failed read degrades to an absent section rather than a broken page.
+  const [clubs, site] = await Promise.all([
+    listPublicLocations().catch(() => []),
+    getSiteContent().catch((): SiteContent => ({ coaches: [], programs: [] })),
+  ]);
   const totalCourts = clubs.reduce((n, c) => n + c.activeCourts, 0);
   const cheapest = clubs.map((c) => c.priceFromCents).filter((p): p is number => p != null);
   const fromPrice = cheapest.length ? Math.min(...cheapest) : null;
+  // Two coaches in a four-column grid leave half a row of nothing; the track count follows the roster.
+  const coachCols = site.coaches.length >= 4 ? "lg:grid-cols-4" : site.coaches.length === 3 ? "max-w-4xl lg:grid-cols-3" : "max-w-2xl";
 
   return (
     <div data-theme="dark" className="bg-navy-950 text-white">
@@ -223,6 +235,86 @@ export default async function LandingPage() {
         </div>
       </section>
 
+      {/* The coaches, with real faces. A page that sells coaching and shows no coach asks for a lot of trust. */}
+      {site.coaches.length > 0 && (
+        <section id="coaches" className="mx-auto max-w-6xl scroll-mt-24 px-4 py-20 sm:px-6">
+          <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <div className="text-overline uppercase text-blue-300">The coaches</div>
+              <h2 className="mt-1 text-h1">The people you will be learning from.</h2>
+            </div>
+            <Button variant="link" href="/app/trainers" rightIcon={<ArrowRight />}>
+              Meet them all
+            </Button>
+          </div>
+          <div className={cn("mx-auto grid gap-4 sm:grid-cols-2", coachCols)}>
+            {site.coaches.slice(0, 4).map((c) => (
+              <Card key={c.id} variant="interactive" padding="lg" href="/app/trainers" className="flex h-full flex-col text-center">
+                <Avatar name={c.name} src={c.photoUrl} size="xl" ring className="mx-auto" />
+                <div className="mt-4 text-h4">{c.name}</div>
+                <div className="text-caption text-blue-300">{c.title}</div>
+                <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+                  {c.specialties.slice(0, 2).map((sp) => (
+                    <Badge key={sp} size="sm" className="bg-white/10 text-blue-100 ring-white/10">
+                      {sp}
+                    </Badge>
+                  ))}
+                </div>
+                <div className="mt-4 flex-1" />
+                <div className="border-t border-white/10 pt-3 text-caption text-blue-100/70">
+                  {c.yearsExperience ? `${count(c.yearsExperience, "year")} coaching` : c.clubs[0] ? `At ${c.clubs[0]}` : "HITTERS coach"}
+                  <span className="mx-1.5 text-white/20">|</span>
+                  <span className="font-bold text-white tabular">{money(c.hourlyRateCents, c.currency)}</span>/h
+                </div>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Programs actually open for enrolment, with the places left. */}
+      {site.programs.length > 0 && (
+        <section id="programs" className="scroll-mt-24 border-y border-white/10 bg-court">
+          <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+            <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="text-overline uppercase text-blue-300">Open for enrolment</div>
+                <h2 className="mt-1 text-h1">Join an intake that starts in weeks, not someday.</h2>
+              </div>
+              <Button variant="link" href="/app/programs" rightIcon={<ArrowRight />}>
+                All programs
+              </Button>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {site.programs.slice(0, 3).map((pr) => (
+                <Card key={pr.id} variant="interactive" padding="lg" href={`/app/programs/${pr.code}`} className="flex h-full flex-col">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-overline uppercase text-blue-300">{programCategoryLabel(pr.category)}</span>
+                    {pr.spotsLeft > 0 && pr.spotsLeft <= 3 && (
+                      <Badge tone="warning" size="sm">
+                        {count(pr.spotsLeft, "place")} left
+                      </Badge>
+                    )}
+                  </div>
+                  <h3 className="mt-2 text-h3">{pr.name}</h3>
+                  {pr.description && <p className="mt-2 line-clamp-3 text-body-sm text-blue-100/70">{pr.description}</p>}
+                  <div className="mt-4 flex flex-wrap gap-1.5">
+                    {pr.levels.length ? pr.levels.map((l) => <LevelBadge key={l} level={l as "A" | "B" | "C" | "D"} size="sm" />) : <Badge size="sm" className="bg-white/10 text-blue-100 ring-white/10">Any level</Badge>}
+                  </div>
+                  <div className="mt-4 flex-1" />
+                  <dl className="space-y-1.5 border-t border-white/10 pt-4 text-body-sm">
+                    <Row label="Starts" value={shortDate(pr.startsOn)} />
+                    <Row label={pluralize(pr.sessionsCount, "Session")} value={String(pr.sessionsCount)} />
+                    <Row label="Club" value={pr.locationName} />
+                    <Row label="Price" value={money(pr.priceCents, pr.currency)} strong />
+                  </dl>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Built for the whole club */}
       <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
         <div className="text-overline uppercase text-blue-300">One platform</div>
@@ -263,6 +355,35 @@ export default async function LandingPage() {
         </div>
       </section>
 
+      {/* Questions the page otherwise leaves open right before asking for a signup. */}
+      <section id="faq" className="scroll-mt-24 border-t border-white/10 bg-court">
+        <div className="mx-auto grid max-w-6xl gap-10 px-4 py-20 sm:px-6 lg:grid-cols-[1fr_1.4fr]">
+          <div>
+            <div className="text-overline uppercase text-blue-300">Questions</div>
+            <h2 className="mt-1 text-h1">Before you book.</h2>
+            <p className="mt-4 text-body text-blue-100/75">
+              Anything else, the front desk at any club will answer it, or ask inside the app once you are in.
+            </p>
+            <Button variant="outline" href="/app/locations" className="mt-6 border-white/30 text-white hover:bg-white/10" rightIcon={<MapPin />}>
+              Find a club
+            </Button>
+          </div>
+          <dl className="divide-y divide-white/10 border-y border-white/10">
+            {FAQS.map((f) => (
+              <details key={f.q} className="group px-1 py-4 [&_summary::-webkit-details-marker]:hidden">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4">
+                  <dt className="text-body font-bold">{f.q}</dt>
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white/5 text-blue-300 transition-transform group-open:rotate-180 [&_svg]:size-4">
+                    <ChevronDown />
+                  </span>
+                </summary>
+                <dd className="mt-2.5 max-w-prose text-body-sm text-blue-100/75">{f.a}</dd>
+              </details>
+            ))}
+          </dl>
+        </div>
+      </section>
+
       {/* Membership CTA */}
       <section id="membership" className="mx-auto max-w-6xl scroll-mt-24 px-4 pb-24 sm:px-6">
         <div className="relative overflow-hidden rounded-2xl bg-brand-gradient p-8 text-white shadow-glow-lg court-line sm:p-14">
@@ -286,3 +407,44 @@ export default async function LandingPage() {
     </div>
   );
 }
+
+/** One line of a program card's summary list. */
+function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <dt className="text-blue-100/60">{label}</dt>
+      <dd className={strong ? "font-bold tabular text-white" : "font-semibold tabular text-blue-100/90"}>{value}</dd>
+    </div>
+  );
+}
+
+/**
+ * Answers describe how the product actually behaves, so they have to be revisited when the rules change:
+ * the booking cutoff, the assessment requirement and the payment method all live in the services.
+ */
+const FAQS = [
+  {
+    q: "Do I need a level before I can play?",
+    a: "No. You can book a court the moment you sign up. A level only matters for matchmaking and for level-based programs, and a free assessment at any club gives you one that follows you to every HITTERS location.",
+  },
+  {
+    q: "How does matchmaking decide who to suggest?",
+    a: "By level, club, time and the format you asked for, and every suggestion tells you the reason it fits. Nothing is automatic: the player who opened the game approves each request before anyone joins.",
+  },
+  {
+    q: "Will other players see my phone number?",
+    a: "Never. A confirmed game gets its own group chat inside the app, so a lineup can sort out who brings the balls without anyone handing over a number. Messages can be reported to a moderator.",
+  },
+  {
+    q: "How do I pay, and what if I cancel?",
+    a: "Courts, lessons and programs are paid at the venue, and your booking is confirmed before you pay. Cancel free of charge up to the cutoff shown on the booking itself, which each club sets for its own courts.",
+  },
+  {
+    q: "What is the difference between a lesson, a package and a program?",
+    a: "A lesson is one hour with a coach you choose. A package is five or ten prepaid lesson credits at a lower rate per lesson. A program is a structured intake of six to twelve weeks with the same group and a place held for you every week.",
+  },
+  {
+    q: "Can I use one account at every club?",
+    a: "Yes. One account covers every HITTERS location: your level, your credits, your history and your bookings are the same wherever you play.",
+  },
+] as const;
