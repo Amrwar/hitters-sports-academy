@@ -11,7 +11,7 @@ import * as memberships from "@/server/services/memberships";
 import * as policy from "@/server/services/payment-policy";
 import * as finance from "@/server/services/finance";
 import { couponDiscount, depositFor, deriveInvoiceStatus, splitEvenly, sumLines } from "@/lib/payments/money";
-import { registerPaymentProvider, unregisterPaymentProvider, type PaymentProvider, type ProviderEvent } from "@/lib/payments/provider";
+import { registerPaymentProvider, unregisterPaymentProvider, type PaymentProvider, type ProviderEvent, type WebhookRequest } from "@/lib/payments/provider";
 import { expectCode, makeLocation, makeUser } from "./helpers";
 
 const NOW = new Date("2026-11-09T08:00:00Z"); // Monday 10:00 Cairo
@@ -58,17 +58,20 @@ const fakeProvider: PaymentProvider = {
     if (fake.refundMode === "fail") return { providerRef: "", status: "FAILED", failureMessage: "Refund window closed" };
     return { providerRef: `rfnd_${req.idempotencyKey}`, status: "SUCCEEDED" };
   },
-  verifyWebhook(raw, headers) {
-    return headers.get("x-signature") === `${fake.secret}:${raw.length}`;
+  verifyWebhook(req) {
+    return req.headers.get("x-signature") === `${fake.secret}:${req.rawBody.length}`;
   },
-  parseEvent(raw) {
-    return JSON.parse(raw) as ProviderEvent;
+  parseEvent(req) {
+    return JSON.parse(req.rawBody) as ProviderEvent;
   },
 };
 
-const signed = (body: unknown) => {
-  const raw = JSON.stringify(body);
-  return { raw, headers: new Headers({ "x-signature": `${fake.secret}:${raw.length}` }) };
+const WEBHOOK_URL = new URL("https://hitters.test/api/payments/webhook/fake");
+
+/** A correctly signed callback, as the route would hand it over. */
+const signed = (body: unknown): WebhookRequest => {
+  const rawBody = JSON.stringify(body);
+  return { rawBody, headers: new Headers({ "x-signature": `${fake.secret}:${rawBody.length}` }), url: WEBHOOK_URL };
 };
 
 async function world() {
@@ -376,13 +379,13 @@ describe("online payment", () => {
     const intent = await db.paymentIntent.findUniqueOrThrow({ where: { id: handoff.intentId } });
 
     const body = { eventId: "evt_1", type: "payment.succeeded", outcome: "succeeded", intentRef: intent.providerRef, amountCents: handoff.amountCents };
-    const { raw, headers } = signed(body);
+    const { rawBody: raw, headers } = signed(body);
 
-    const first = await payments.handleWebhook("fake", raw, headers, { now: NOW });
+    const first = await payments.handleWebhook("fake", { rawBody: raw, headers, url: WEBHOOK_URL }, { now: NOW });
     expect(first.status).toBe(200);
-    const second = await payments.handleWebhook("fake", raw, headers, { now: NOW });
+    const second = await payments.handleWebhook("fake", { rawBody: raw, headers, url: WEBHOOK_URL }, { now: NOW });
     expect(second.body).toBe("duplicate");
-    const third = await payments.handleWebhook("fake", raw, headers, { now: NOW });
+    const third = await payments.handleWebhook("fake", { rawBody: raw, headers, url: WEBHOOK_URL }, { now: NOW });
     expect(third.body).toBe("duplicate");
 
     const after = await db.invoice.findUniqueOrThrow({ where: { id: inv.id } });
@@ -398,7 +401,7 @@ describe("online payment", () => {
     const intent = await db.paymentIntent.findUniqueOrThrow({ where: { id: handoff.intentId } });
     const raw = JSON.stringify({ eventId: "evt_forged", type: "payment.succeeded", outcome: "succeeded", intentRef: intent.providerRef });
 
-    const result = await payments.handleWebhook("fake", raw, new Headers({ "x-signature": "nope" }), { now: NOW });
+    const result = await payments.handleWebhook("fake", { rawBody: raw, headers: new Headers({ "x-signature": "nope" }), url: WEBHOOK_URL }, { now: NOW });
     expect(result.status).toBe(400);
     const after = await db.invoice.findUniqueOrThrow({ where: { id: inv.id } });
     expect(after.paidCents).toBe(0);
@@ -407,8 +410,8 @@ describe("online payment", () => {
   });
 
   it("ignores a webhook for an attempt it has never heard of", async () => {
-    const { raw, headers } = signed({ eventId: "evt_unknown", type: "payment.succeeded", outcome: "succeeded", intentRef: "ref_nothing" });
-    const result = await payments.handleWebhook("fake", raw, headers, { now: NOW });
+    const { rawBody: raw, headers } = signed({ eventId: "evt_unknown", type: "payment.succeeded", outcome: "succeeded", intentRef: "ref_nothing" });
+    const result = await payments.handleWebhook("fake", { rawBody: raw, headers, url: WEBHOOK_URL }, { now: NOW });
     expect(result.status).toBe(200);
     expect(await db.payment.count({ where: { status: "PAID" } })).toBe(0);
   });
@@ -418,9 +421,9 @@ describe("online payment", () => {
     const inv = await invoiceFor(b.id);
     const handoff = await payments.startOnlinePayment(w.p1.actor, inv.id, {}, { now: NOW });
     const intent = await db.paymentIntent.findUniqueOrThrow({ where: { id: handoff.intentId } });
-    const { raw, headers } = signed({ eventId: "evt_fail", type: "payment.failed", outcome: "failed", intentRef: intent.providerRef, failureMessage: "Insufficient funds" });
+    const { rawBody: raw, headers } = signed({ eventId: "evt_fail", type: "payment.failed", outcome: "failed", intentRef: intent.providerRef, failureMessage: "Insufficient funds" });
 
-    await payments.handleWebhook("fake", raw, headers, { now: NOW });
+    await payments.handleWebhook("fake", { rawBody: raw, headers, url: WEBHOOK_URL }, { now: NOW });
     const after = await db.paymentIntent.findUniqueOrThrow({ where: { id: handoff.intentId } });
     expect(after.status).toBe("FAILED");
     expect(after.failureMessage).toBe("Insufficient funds");
@@ -442,11 +445,40 @@ describe("online payment", () => {
     const inv = await invoiceFor(b.id);
     const handoff = await payments.startOnlinePayment(w.p1.actor, inv.id, {}, { now: NOW });
     const intent = await db.paymentIntent.findUniqueOrThrow({ where: { id: handoff.intentId } });
-    const { raw, headers } = signed({ eventId: "evt_race", type: "payment.succeeded", outcome: "succeeded", intentRef: intent.providerRef });
+    const { rawBody: raw, headers } = signed({ eventId: "evt_race", type: "payment.succeeded", outcome: "succeeded", intentRef: intent.providerRef });
 
-    await Promise.allSettled([payments.handleWebhook("fake", raw, headers, { now: NOW }), payments.reconcileIntent(handoff.intentId, { now: NOW })]);
+    await Promise.allSettled([payments.handleWebhook("fake", { rawBody: raw, headers, url: WEBHOOK_URL }, { now: NOW }), payments.reconcileIntent(handoff.intentId, { now: NOW })]);
     expect(await db.payment.count({ where: { invoiceId: inv.id, status: "PAID" } })).toBe(1);
     expect((await db.invoice.findUniqueOrThrow({ where: { id: inv.id } })).paidCents).toBe(handoff.amountCents);
+  });
+
+  it("stores the reference a refund will need, not the one the intent correlates on", async () => {
+    // Some gateways, Paymob among them, correlate an intent on an order id but refund by transaction id.
+    // Keeping the order id on the payment would make every refund against them fail.
+    const b = await book(w);
+    const inv = await invoiceFor(b.id);
+    const handoff = await payments.startOnlinePayment(w.p1.actor, inv.id, {}, { now: NOW });
+    const intent = await db.paymentIntent.findUniqueOrThrow({ where: { id: handoff.intentId } });
+    const { rawBody: raw, headers } = signed({ eventId: "evt_refs", type: "payment.succeeded", outcome: "succeeded", intentRef: intent.providerRef, refundRef: "txn_9988", amountCents: handoff.amountCents });
+
+    await payments.handleWebhook("fake", { rawBody: raw, headers, url: WEBHOOK_URL }, { now: NOW });
+    const payment = await db.payment.findFirstOrThrow({ where: { invoiceId: inv.id, status: "PAID" } });
+    expect(payment.providerRef).toBe("txn_9988");
+  });
+
+  it("ignores a refund callback rather than reopening the payment", async () => {
+    const b = await book(w);
+    const inv = await invoiceFor(b.id);
+    const handoff = await payments.startOnlinePayment(w.p1.actor, inv.id, {}, { now: NOW });
+    const intent = await db.paymentIntent.findUniqueOrThrow({ where: { id: handoff.intentId } });
+    const paid = signed({ eventId: "evt_paid", type: "payment.succeeded", outcome: "succeeded", intentRef: intent.providerRef, amountCents: handoff.amountCents });
+    await payments.handleWebhook("fake", { rawBody: paid.rawBody, headers: paid.headers, url: WEBHOOK_URL }, { now: NOW });
+
+    // We record refunds ourselves; a provider telling us about one must not mark the intent failed.
+    const refunded = signed({ eventId: "evt_refunded", type: "payment.refunded", outcome: "refunded", intentRef: intent.providerRef, amountCents: handoff.amountCents });
+    await payments.handleWebhook("fake", { rawBody: refunded.rawBody, headers: refunded.headers, url: WEBHOOK_URL }, { now: NOW });
+    expect((await db.paymentIntent.findUniqueOrThrow({ where: { id: handoff.intentId } })).status).toBe("SUCCEEDED");
+    expect((await db.invoice.findUniqueOrThrow({ where: { id: inv.id } })).status).toBe("PAID");
   });
 
   it("refuses online payment when no gateway is configured", async () => {
@@ -543,8 +575,8 @@ describe("refunds", () => {
       const inv = await invoiceFor(b.id);
       const handoff = await payments.startOnlinePayment(w.p1.actor, inv.id, {}, { now: NOW });
       const intent = await db.paymentIntent.findUniqueOrThrow({ where: { id: handoff.intentId } });
-      const { raw, headers } = signed({ eventId: "evt_ok", type: "payment.succeeded", outcome: "succeeded", intentRef: intent.providerRef });
-      await payments.handleWebhook("fake", raw, headers, { now: NOW });
+      const { rawBody: raw, headers } = signed({ eventId: "evt_ok", type: "payment.succeeded", outcome: "succeeded", intentRef: intent.providerRef });
+      await payments.handleWebhook("fake", { rawBody: raw, headers, url: WEBHOOK_URL }, { now: NOW });
 
       fake.refundMode = "fail";
       await expectCode(refunds.refundInvoice(w.manager.actor, inv.id, {}, { now: NOW }), "REFUND_NOT_ALLOWED");

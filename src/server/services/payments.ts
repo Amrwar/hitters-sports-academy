@@ -26,12 +26,17 @@ import { audit } from "@/lib/audit";
 import { alreadyPaid, conflict, notFound, paymentFailed, providerUnavailable, validation } from "@/lib/errors";
 import { requireActor, requirePermission, type Actor } from "@/lib/auth/authorize";
 import { amountDue, depositFor } from "@/lib/payments/money";
-import { getPaymentProvider, manualProvider, onlineProvider, type ProviderEvent } from "@/lib/payments/provider";
+import { getPaymentProvider, manualProvider, onlineProvider, type ProviderEvent, type WebhookRequest } from "@/lib/payments/provider";
+import { registerConfiguredProviders } from "@/lib/payments/register";
 import { fieldErrors, startOnlinePaymentSchema, takePaymentSchema } from "@/lib/validation/schemas";
 import { getPaymentPolicy } from "./payment-policy";
 import { postCreditEntry } from "./credits";
 import { recalculateInvoice, type InvoiceView } from "./invoices";
 import { notify } from "./notifications";
+
+// Adapters register themselves at import time; this is the one place that pulls them in, so a service
+// importing payments gets whatever gateway the deployment is configured for.
+registerConfiguredProviders();
 
 /** Stable key for a payment that must happen at most once. Shape only matters to us. */
 export const idempotencyKey = (scope: string, ...parts: (string | number)[]): string => `${scope}:${parts.join(":")}`;
@@ -316,10 +321,16 @@ export async function startOnlinePayment(actor: Actor | null, invoiceId: string,
  * the provider's own reference rather than anything the browser sends, and idempotent on that reference:
  * a provider that delivers the same event five times pays the invoice once.
  */
-export async function settleIntent(event: Pick<ProviderEvent, "intentRef" | "outcome" | "amountCents" | "failureCode" | "failureMessage"> & { provider: string; providerRef?: string }, opts: { now?: Date } = {}): Promise<{ settled: boolean; invoiceId: string | null }> {
+export async function settleIntent(
+  event: Pick<ProviderEvent, "intentRef" | "refundRef" | "outcome" | "amountCents" | "failureCode" | "failureMessage"> & { provider: string; providerRef?: string },
+  opts: { now?: Date } = {},
+): Promise<{ settled: boolean; invoiceId: string | null }> {
   const now = opts.now ?? new Date();
   const ref = event.providerRef ?? event.intentRef;
   if (!ref) return { settled: false, invoiceId: null };
+  // A refund the provider tells us about is one we raised and already recorded; there is nothing to
+  // settle, and treating it as a failed payment would wrongly reopen the intent.
+  if (event.outcome === "refunded" || event.outcome === "ignored") return { settled: false, invoiceId: null };
 
   return db.$transaction(async (tx) => {
     const intent = await tx.paymentIntent.findUnique({
@@ -347,7 +358,10 @@ export async function settleIntent(event: Pick<ProviderEvent, "intentRef" | "out
       method: "CARD",
       status: "PAID",
       provider: event.provider,
-      providerRef: ref,
+      // The transaction reference where the provider gives one, because that is what a refund call
+      // takes. Correlating the intent and refunding it use different ids on some gateways, Paymob
+      // among them, and storing the wrong one makes every refund fail.
+      providerRef: event.refundRef ?? ref,
       intentId: intent.id,
       idempotencyKey: `settle:${event.provider}:${ref}`,
       now,
@@ -398,13 +412,14 @@ export async function reconcileIntent(intentId: string, opts: { now?: Date } = {
  * once; a forged body never gets past the signature; and an event we failed to process is still on disk
  * to be replayed by hand.
  */
-export async function handleWebhook(providerKey: string, rawBody: string, headers: Headers, opts: { now?: Date } = {}): Promise<{ status: number; body: string }> {
+export async function handleWebhook(providerKey: string, req: WebhookRequest, opts: { now?: Date } = {}): Promise<{ status: number; body: string }> {
   const now = opts.now ?? new Date();
+  const { rawBody } = req;
   const provider = getPaymentProvider(providerKey);
   if (!provider || !provider.online) return { status: 404, body: "unknown provider" };
 
   const payloadHash = createHash("sha256").update(rawBody).digest("hex");
-  const signatureOk = provider.verifyWebhook(rawBody, headers);
+  const signatureOk = provider.verifyWebhook(req);
   if (!signatureOk) {
     await db.webhookEvent
       .create({ data: { provider: providerKey, eventId: `unsigned:${payloadHash}`, type: "signature.invalid", payloadHash, payload: safeJson(rawBody), signatureOk: false, processedAt: now, error: "Signature did not verify" } })
@@ -414,7 +429,7 @@ export async function handleWebhook(providerKey: string, rawBody: string, header
 
   let event: ProviderEvent;
   try {
-    event = provider.parseEvent(rawBody, headers);
+    event = provider.parseEvent(req);
   } catch {
     await db.webhookEvent.create({ data: { provider: providerKey, eventId: `unparsed:${payloadHash}`, type: "parse.failed", payloadHash, payload: safeJson(rawBody), signatureOk: true, processedAt: now, error: "Could not be parsed" } }).catch(() => undefined);
     return { status: 400, body: "unparseable" };

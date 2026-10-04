@@ -30,7 +30,9 @@ export async function POST(request: Request, context: { params: Promise<{ provid
   }
   if (raw.length > 1_000_000) return new NextResponse("too large", { status: 413 });
 
-  const result = await handleWebhook(provider, raw, request.headers);
+  // The URL goes through as well as the body: not every gateway signs in a header, and Paymob passes
+  // its HMAC as a query parameter.
+  const result = await handleWebhook(provider, { rawBody: raw, headers: request.headers, url: new URL(request.url) });
   return new NextResponse(result.body, { status: result.status });
 }
 

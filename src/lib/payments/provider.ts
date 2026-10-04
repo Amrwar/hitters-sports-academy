@@ -81,6 +81,15 @@ export type ProviderEvent = {
   failureMessage?: string;
 };
 
+/**
+ * One inbound callback, as it arrived.
+ *
+ * The URL is part of it because not every gateway puts its signature in a header: Paymob passes an HMAC
+ * as a query parameter. The raw body is the exact bytes received, never a re-serialised object, because
+ * every signature scheme signs the bytes.
+ */
+export type WebhookRequest = { rawBody: string; headers: Headers; url: URL };
+
 export interface PaymentProvider {
   readonly key: ProviderKey;
   readonly label: string;
@@ -93,10 +102,10 @@ export interface PaymentProvider {
   /** Asks the provider what actually happened. The fallback when a webhook is late, lost or replayed. */
   fetchIntent(providerRef: string): Promise<IntentResult>;
   refund(req: RefundRequest): Promise<RefundResult>;
-  /** Verifies the signature over the exact bytes received, before the body is parsed or trusted. */
-  verifyWebhook(rawBody: string, headers: Headers): boolean;
+  /** Verifies the signature over exactly what arrived, before the body is parsed or trusted. */
+  verifyWebhook(req: WebhookRequest): boolean;
   /** Only called once `verifyWebhook` has passed. */
-  parseEvent(rawBody: string, headers: Headers): ProviderEvent;
+  parseEvent(req: WebhookRequest): ProviderEvent;
 }
 
 /**
