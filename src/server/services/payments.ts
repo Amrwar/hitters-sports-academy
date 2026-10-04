@@ -183,6 +183,7 @@ export async function takePayment(actor: Actor | null, invoiceId: string, input:
       metadata: { paymentId: result.id, amountCents, method: parsed.data.method, waived: parsed.data.waive, reference: parsed.data.reference ?? null },
     }, tx);
   });
+  await onInvoiceSettled(invoiceId, { now });
   return reloadInvoice(invoiceId);
 }
 
@@ -222,6 +223,7 @@ export async function payWithCredit(actor: Actor | null, invoiceId: string, opts
     await recalculateInvoice(tx, invoiceId, now);
     await audit({ actorId: a.id, action: "payment.credit", entityType: "Invoice", entityId: invoiceId, locationId: invoice.locationId, metadata: { paymentId: result.id, amountCents } }, tx);
   });
+  await onInvoiceSettled(invoiceId, { now });
   return reloadInvoice(invoiceId);
 }
 
@@ -356,7 +358,11 @@ export async function settleIntent(event: Pick<ProviderEvent, "intentRef" | "out
     await recalculateInvoice(tx, intent.invoiceId, now);
     await audit({ actorId: null, action: "payment.settled", entityType: "Invoice", entityId: intent.invoiceId, locationId: invoice.locationId, metadata: { provider: event.provider, providerRef: ref, amountCents, paymentId: result.id } }, tx);
     return { settled: true, invoiceId: intent.invoiceId };
-  });
+  })
+    .then(async (outcome) => {
+      if (outcome.settled && outcome.invoiceId) await onInvoiceSettled(outcome.invoiceId, { now });
+      return outcome;
+    });
 }
 
 /**
@@ -458,10 +464,22 @@ export async function outstandingForPlayer(playerId: string): Promise<{ invoices
   return { invoices: rows.filter((r) => amountDue(r) > 0).length, amountCents };
 }
 
-/** Lets a settled invoice tell the player, without every caller having to remember to. */
-export async function notifyPaid(invoiceId: string): Promise<void> {
-  const invoice = await db.invoice.findUnique({ where: { id: invoiceId }, select: { number: true, playerId: true, totalCents: true, currency: true, status: true } });
-  if (!invoice?.playerId || invoice.status !== "PAID") return;
+/**
+ * What happens once an invoice is settled, whichever way the money arrived.
+ *
+ * Deliberately outside the transaction that took the payment: a notification that fails to send, or a
+ * membership activation that throws, must not roll back money that has already left a player's card.
+ * Everything here is idempotent, so the webhook that arrives twice runs it twice and changes nothing.
+ */
+export async function onInvoiceSettled(invoiceId: string, opts: { now?: Date } = {}): Promise<void> {
+  const invoice = await db.invoice.findUnique({ where: { id: invoiceId }, select: { number: true, playerId: true, totalCents: true, currency: true, status: true, membershipId: true, bookingId: true } });
+  if (!invoice || invoice.status !== "PAID") return;
+
+  if (invoice.membershipId) {
+    const { activateMembership } = await import("./memberships");
+    await activateMembership(invoice.membershipId, opts).catch(() => undefined);
+  }
+  if (!invoice.playerId) return;
   await notify(invoice.playerId, {
     type: "payment.received",
     data: { number: invoice.number, amount: `${invoice.currency} ${(invoice.totalCents / 100).toLocaleString("en")}` },

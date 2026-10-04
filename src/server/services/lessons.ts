@@ -7,6 +7,7 @@ import { accessibleLocationIds, can, requireActor, requirePermission, type Actor
 import { formatInZone, zonedToUtc } from "@/lib/time";
 import { fieldErrors, lessonAttendanceSchema, lessonCancelSchema, lessonRequestSchema, progressNoteSchema } from "@/lib/validation/schemas";
 import { notify, notifyMany } from "./notifications";
+import { createInvoice } from "./invoices";
 import { suffix } from "@/lib/notifications";
 import { getTrainerDay, LESSON_CANCEL_CUTOFF_HOURS, LESSON_WINDOW_DAYS, trainerSelect, type TrainerView } from "./trainers";
 
@@ -158,6 +159,20 @@ export async function bookLesson(actor: Actor | null, input: unknown, opts: { no
           },
           select: lessonSelect,
         });
+        // A lesson paid with a package credit is already settled; only one bought outright is invoiced.
+        if (!purchase) {
+          await createInvoice(
+            tx,
+            {
+              playerId,
+              locationId,
+              lessonId: created.id,
+              createdById: a.id,
+              lines: [{ kind: "LESSON", description: `${durationMinutes} min with ${trainer.user.name} \u00b7 ${loc.name} \u00b7 ${formatInZone(startsAt, loc.timezone)}`, unitCents: priceCents }],
+            },
+            now,
+          );
+        }
         await audit({ actorId: a.id, action: "lesson.booked", entityType: "Lesson", entityId: created.id, locationId, metadata: { code: c, trainerId: trainer.id, playerId, startsAt, durationMinutes, priceCents, credit: !!purchase, onBehalf, status: created.status } }, tx);
         return created;
       },

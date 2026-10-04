@@ -8,6 +8,7 @@ import { GAME_FORMATS } from "@/lib/catalog";
 import { formatInZone, utcToZoned } from "@/lib/time";
 import { cancelGameSchema, createGameSessionSchema, fieldErrors, gameDiscoverSchema, gameListSchema, inviteToGameSchema, updateGameSessionSchema } from "@/lib/validation/schemas";
 import { notify, notifyMany } from "./notifications";
+import { billGameShares, unbillGameShares } from "./game-billing";
 import { plural, suffix } from "@/lib/notifications";
 import { requireActivePair } from "./pairs";
 
@@ -517,6 +518,8 @@ export async function confirmGame(actor: Actor | null, sessionId: string, opts: 
     await audit({ actorId: a.id, action: "game.confirmed", entityType: "GameSession", entityId: g.id, locationId: g.locationId }, tx);
     return load(g.id, tx);
   });
+  // Outside the transaction: a billing failure must not undo a lineup the players have already agreed.
+  await billGameShares(g.id, a.id, { now }).catch(() => undefined);
   const others = g.participants.filter((p) => p.status === "ACCEPTED" && p.userId !== a.id).map((p) => p.userId);
   await notifyMany(others, { type: "game.confirmed", url: `/app/play/${g.code}`, groupKey: g.id, data: { ...whenData(g), code: g.code, gameId: g.id } });
   return updated;
@@ -539,6 +542,8 @@ export async function cancelGame(actor: Actor | null, sessionId: string, input: 
     requesters = await expireRequestsForGame(tx, g.id);
     return load(g.id, tx);
   });
+  // The shares go; the court booking does not, because it may still be going ahead.
+  await unbillGameShares(g.id, a.id, { now }).catch(() => undefined);
   const others = [...new Set([...g.participants.filter((p) => ["ACCEPTED", "INVITED"].includes(p.status)).map((p) => p.userId), ...requesters])].filter((id) => id !== a.id);
   await notifyMany(others, { type: "game.cancelled", url: `/app/play/${g.code}`, groupKey: g.id, data: { ...whenData(g), reasonSuffix: suffix(parsed.data.reason), code: g.code, gameId: g.id } });
   return updated;

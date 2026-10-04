@@ -6,6 +6,7 @@ import { AppError, forbidden, notFound, validation } from "@/lib/errors";
 import { accessibleLocationIds, can, requireActor, requirePermission, type Actor } from "@/lib/auth/authorize";
 import { fieldErrors, packagePurchaseSchema, packageSchema, recordPaymentSchema } from "@/lib/validation/schemas";
 import { notify } from "./notifications";
+import { createInvoice } from "./invoices";
 import { plural } from "@/lib/notifications";
 import { plainDate } from "@/lib/time";
 
@@ -138,6 +139,11 @@ export async function purchasePackage(actor: Actor | null, input: unknown, opts:
       data: { code: c, playerId, packageId: pkg?.id ?? null, name, credits, priceCents, currency: pkg?.currency ?? "EGP", trainerId: pkg?.trainerId ?? null, locationId, purchasedAt: now, expiresAt: new Date(now.getTime() + validityDays * 86_400_000), status: "ACTIVE", createdById: a.id, payments: { create: { amountCents: priceCents, currency: pkg?.currency ?? "EGP", status: "PENDING", method: "NONE" } } },
       select: purchaseSelect,
     });
+    await createInvoice(
+      tx,
+      { playerId, locationId, currency: pkg?.currency ?? "EGP", purchaseId: p.id, createdById: a.id, lines: [{ kind: "PACKAGE", description: `${name} · ${credits} lesson credit${credits === 1 ? "" : "s"}`, unitCents: priceCents }] },
+      now,
+    );
     await audit({ actorId: a.id, action: "package.purchased", entityType: "PackagePurchase", entityId: p.id, locationId, metadata: { code: c, playerId, credits, priceCents, custom } }, tx);
     return view(p);
   });

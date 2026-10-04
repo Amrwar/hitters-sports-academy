@@ -7,6 +7,7 @@ import { accessibleLocationIds, can, requireActor, requirePermission, type Actor
 import { addDaysISO, dayOfWeekISO, formatInZone, zonedToUtc } from "@/lib/time";
 import { attendanceMarkSchema, enrollmentCancelSchema, fieldErrors, programSchema, programUpdateSchema } from "@/lib/validation/schemas";
 import { notify, notifyMany } from "./notifications";
+import { createInvoice } from "./invoices";
 
 /* ------------------------------------------------------------------ Select */
 
@@ -296,6 +297,11 @@ export async function enroll(actor: Actor | null, programId: string, opts: { pla
         : await tx.programEnrollment.create({ data: { programId: p.id, playerId, ...data }, select: enrollmentSelect });
       if (status === "ENROLLED") {
         await tx.payment.create({ data: { enrollmentId: e.id, amountCents: p.priceCents, currency: p.currency, status: "PENDING", method: "NONE" } });
+        await createInvoice(
+          tx,
+          { playerId: a.id, locationId: p.locationId, currency: p.currency, enrollmentId: e.id, createdById: a.id, lines: [{ kind: "PROGRAM", description: `${p.name} \u00b7 ${p.sessionsCount} sessions`, unitCents: p.priceCents }] },
+          now,
+        );
         if (p.enrolledCount + 1 >= p.capacity && p.status === "OPEN") await tx.program.update({ where: { id: p.id }, data: { status: "FULL" } });
       }
       await audit({ actorId: a.id, action: status === "ENROLLED" ? "program.enrolled" : "program.waitlisted", entityType: "ProgramEnrollment", entityId: e.id, locationId: p.locationId, metadata: { programId: p.id, playerId, position } }, tx);
@@ -329,6 +335,11 @@ async function promoteWaitlist(tx: Prisma.TransactionClient, programId: string, 
     if (!next) break;
     await tx.programEnrollment.update({ where: { id: next.id }, data: { status: "ENROLLED", position: null, enrolledAt: new Date() } });
     await tx.payment.create({ data: { enrollmentId: next.id, amountCents: p.priceCents, currency: p.currency, status: "PENDING", method: "NONE" } });
+    await createInvoice(
+      tx,
+      { playerId: next.playerId, locationId: p.locationId, currency: p.currency, enrollmentId: next.id, lines: [{ kind: "PROGRAM", description: `${p.name} \u00b7 ${p.sessionsCount} sessions`, unitCents: p.priceCents }] },
+      new Date(),
+    );
     await audit({ actorId, action: "program.promoted", entityType: "ProgramEnrollment", entityId: next.id, locationId: p.locationId, metadata: { programId } }, tx);
     promoted.push(next.playerId);
   }

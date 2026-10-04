@@ -8,19 +8,21 @@ import { seedRolePermissions } from "@/server/services/permissions-seed";
 import { invalidateMatchmakingConfigCache } from "@/server/services/matchmaking";
 import { invalidateTemplateCache } from "@/server/services/notifications";
 import { invalidateLevelCache } from "@/server/services/levels";
+import { invalidatePaymentPolicyCache } from "@/server/services/payment-policy";
 import { buildActor } from "@/server/services/sessions";
 
 export const PASSWORD = "Correct-horse-9";
 
 export async function resetDb() {
   await db.$executeRawUnsafe(
-    `TRUNCATE TABLE "AuditLog","MessageReport","Message","MessageThread","NotificationDelivery","NotificationPreference","NotificationTemplate","Notification","PackageRedemption","PackagePurchase","TrainingPackage","ProgramAttendance","ProgramEnrollment","ProgramSession","Program","ProgressNote","Lesson","TrainerTimeOff","TrainerAvailability","TrainerLocation","TrainerProfile","MatchmakingConfig","GameJoinRequest","GameParticipant","GameSession","Pair","Payment","BookingParticipant","Booking","TrainingRecord","AssessmentRequest","Assessment","LevelDefinition","_PreferredLocations","PricingRule","CourtClosure","CourtAvailability","Court","LocationPhoto","BookingPolicy","StaffMembership","PlayerProfile","VerificationToken","Session","RolePermission","Location","User" RESTART IDENTITY CASCADE`,
+    `TRUNCATE TABLE "CouponRedemption","Coupon","CreditEntry","CreditAccount","Refund","PaymentIntent","WebhookEvent","InvoiceLine","Invoice","Membership","MembershipPlan","PaymentPolicy","AuditLog","MessageReport","Message","MessageThread","NotificationDelivery","NotificationPreference","NotificationTemplate","Notification","PackageRedemption","PackagePurchase","TrainingPackage","ProgramAttendance","ProgramEnrollment","ProgramSession","Program","ProgressNote","Lesson","TrainerTimeOff","TrainerAvailability","TrainerLocation","TrainerProfile","MatchmakingConfig","GameJoinRequest","GameParticipant","GameSession","Pair","Payment","BookingParticipant","Booking","TrainingRecord","AssessmentRequest","Assessment","LevelDefinition","_PreferredLocations","PricingRule","CourtClosure","CourtAvailability","Court","LocationPhoto","BookingPolicy","StaffMembership","PlayerProfile","VerificationToken","Session","RolePermission","Location","User" RESTART IDENTITY CASCADE`,
   );
   await seedRolePermissions(db);
   invalidatePermissionCache();
   invalidateMatchmakingConfigCache();
   invalidateLevelCache();
   invalidateTemplateCache();
+  invalidatePaymentPolicyCache();
   clearRateLimits();
   mailOutbox.length = 0;
 }

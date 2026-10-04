@@ -36,6 +36,9 @@ export const PERMISSIONS = [
   // Finance
   "finance.read",
   "finance.manage",
+  "invoice.read.own",
+  "refund.issue",
+  "membership.buy.own",
   // Bookings and payments
   "booking.create.own",
   "booking.read.own",
@@ -105,6 +108,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "staff.read",
     "staff.manage",
     "finance.read",
+    "finance.manage",
+    "refund.issue",
     "booking.read",
     "booking.manage",
     "payment.manage",
@@ -124,8 +129,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   RECEPTIONIST: ["users.read", "profile.read.any", "assessment.read", "assessment.schedule", "training.read", "location.read", "court.read", "staff.read", "booking.read", "booking.manage", "payment.manage", "session.read", "session.manage", "trainer.read", "lesson.read", "lesson.manage", "package.manage", "message.moderate", "notification.send"],
   TRAINER: ["users.read", "profile.read.any", "assessment.read", "training.read", "training.record", "location.read", "court.read", "booking.read", "session.read", "trainer.read", "trainer.self", "message.participate"],
   ASSESSOR: ["users.read", "profile.read.any", "assessment.read", "assessment.create", "assessment.schedule", "training.read", "location.read", "court.read", "session.read", "trainer.read"],
-  FINANCE_MANAGER: ["users.read", "location.read", "court.read", "finance.read", "finance.manage", "booking.read", "payment.manage", "session.read", "trainer.read", "lesson.read", "package.manage", "audit.read"],
-  PLAYER: ["profile.read.own", "profile.update.own", "assessment.request.own", "location.read", "court.read", "booking.create.own", "booking.read.own", "booking.cancel.own", "session.create.own", "session.participate.own", "lesson.book.own", "lesson.read.own", "program.enroll.own", "package.purchase.own", "message.participate"],
+  FINANCE_MANAGER: ["users.read", "location.read", "court.read", "finance.read", "finance.manage", "refund.issue", "booking.read", "payment.manage", "session.read", "trainer.read", "lesson.read", "package.manage", "audit.read"],
+  PLAYER: ["profile.read.own", "profile.update.own", "invoice.read.own", "membership.buy.own", "assessment.request.own", "location.read", "court.read", "booking.create.own", "booking.read.own", "booking.cancel.own", "session.create.own", "session.participate.own", "lesson.book.own", "lesson.read.own", "program.enroll.own", "package.purchase.own", "message.participate"],
 };
 
 /** Staff roles a LOCATION_MANAGER may grant at their own location. Only global roles may grant LOCATION_MANAGER. */

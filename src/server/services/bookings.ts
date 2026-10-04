@@ -7,6 +7,10 @@ import { accessibleLocationIds, can, requireActor, requirePermission, type Actor
 import { dayOfWeekISO, formatInZone, utcToZoned, zonedToUtc } from "@/lib/time";
 import { bookingListSchema, bookingRequestSchema, cancelBookingSchema, createBookingSchema, fieldErrors, recordPaymentSchema, type BookingRequest, type OpeningHours } from "@/lib/validation/schemas";
 import { quotePrice, type Quote } from "./pricing";
+import { createInvoice, recalculateInvoice } from "./invoices";
+import { memberTier } from "./memberships";
+import { cancellationCharge, getPaymentPolicy } from "./payment-policy";
+import { depositFor } from "@/lib/payments/money";
 import { notify, notifyMany } from "./notifications";
 import { suffix } from "@/lib/notifications";
 import { cancelGameForBooking, moveGameToBooking, type GameCascade } from "./game-sessions";
@@ -61,7 +65,7 @@ export type BookingQuote = {
   cancellationCutoffHours: number;
 };
 
-type ValidateOpts = { now?: Date; excludeBookingId?: string; staff?: boolean };
+type ValidateOpts = { now?: Date; excludeBookingId?: string; staff?: boolean; /** Whose membership prices this slot. A guest booking has none. */ playerId?: string | null };
 
 function isOverlapError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e);
@@ -113,7 +117,8 @@ async function validateSlot(req: BookingRequest, opts: ValidateOpts = {}): Promi
   if (startsAt <= now) throw new AppError("SLOT_UNAVAILABLE", "That time has already passed.");
   if (!opts.staff) {
     if (startsAt.getTime() < now.getTime() + policy.minNoticeMinutes * 60_000) throw new AppError("SLOT_UNAVAILABLE", `Bookings need at least ${policy.minNoticeMinutes} minutes' notice.`);
-    if (startsAt.getTime() > now.getTime() + policy.advanceBookingDays * 86_400_000) throw new AppError("SLOT_UNAVAILABLE", `You can book up to ${policy.advanceBookingDays} days ahead.`);
+    const windowDays = policy.advanceBookingDays + (await memberTier(opts.playerId, { now })).priorityBookingDays;
+    if (startsAt.getTime() > now.getTime() + windowDays * 86_400_000) throw new AppError("SLOT_UNAVAILABLE", `You can book up to ${windowDays} days ahead.`);
   }
 
   const clash = await db.booking.findFirst({
@@ -123,7 +128,18 @@ async function validateSlot(req: BookingRequest, opts: ValidateOpts = {}): Promi
   if (clash) throw new AppError("SLOT_UNAVAILABLE", "That slot is no longer available.");
 
   const rules = await db.pricingRule.findMany({ where: { locationId: loc.id, active: true } });
-  const quote = quotePrice({ rules, courtId: court.id, baseHourlyCents: window.priceCents, dateISO: req.dateISO, dayOfWeek, startMinutes: req.startMinutes, durationMinutes: req.durationMinutes });
+  const tier = await memberTier(opts.playerId, { now });
+  const quote = quotePrice({
+    rules,
+    courtId: court.id,
+    baseHourlyCents: window.priceCents,
+    dateISO: req.dateISO,
+    dayOfWeek,
+    startMinutes: req.startMinutes,
+    durationMinutes: req.durationMinutes,
+    isMember: tier.isMember,
+    membershipTier: tier.tier,
+  });
 
   return {
     court: { id: court.id, name: court.name, locationId: loc.id },
@@ -145,7 +161,7 @@ export async function quoteBooking(actor: Actor | null, input: unknown, opts: { 
   const court = await db.court.findUnique({ where: { id: parsed.data.courtId }, select: { locationId: true } });
   if (!court) throw notFound("Court");
   const staff = await can(a, "booking.manage", { locationId: court.locationId });
-  return validateSlot(parsed.data, { now: opts.now, staff });
+  return validateSlot(parsed.data, { now: opts.now, staff, playerId: a.id });
 }
 
 /* ------------------------------------------------------------------ Create */
@@ -197,7 +213,8 @@ export async function createBooking(actor: Actor | null, input: unknown, opts: {
     if (!player || player.status !== "ACTIVE") throw notFound("Member");
   }
 
-  const slot = await validateSlot(req, { now, staff });
+  const slot = await validateSlot(req, { now, staff, playerId });
+  const policy = await getPaymentPolicy(locationId);
 
   try {
     const booking = await db.$transaction(
@@ -235,6 +252,25 @@ export async function createBooking(actor: Actor | null, input: unknown, opts: {
           },
           select: bookingSelect,
         });
+        // The money record is raised in the same transaction as the reservation: a booking that exists
+        // with nothing owed against it is a booking the club cannot bill for.
+        await createInvoice(
+          tx,
+          {
+            playerId,
+            guestName,
+            guestPhone,
+            locationId,
+            bookingId: created.id,
+            createdById: a.id,
+            depositCents: depositFor(slot.quote.totalCents, policy.depositPercent),
+            lines: [
+              { kind: "COURT", description: `${slot.court.name} \u00b7 ${slot.location.name} \u00b7 ${formatInZone(slot.startsAt, slot.location.timezone)} \u00b7 ${req.durationMinutes} min`, unitCents: slot.quote.baseCents },
+              ...slot.quote.adjustments.map((adj) => ({ kind: (adj.deltaCents < 0 ? "DISCOUNT" : "COURT") as "DISCOUNT" | "COURT", description: adj.name, unitCents: Math.abs(adj.deltaCents) * (adj.deltaCents < 0 ? -1 : 1) })),
+            ],
+          },
+          now,
+        );
         await audit({ actorId: a.id, action: "booking.created", entityType: "Booking", entityId: created.id, locationId, metadata: { code, courtId: req.courtId, startsAt: slot.startsAt, durationMinutes: req.durationMinutes, priceCents: slot.quote.totalCents, onBehalf } }, tx);
         return created;
       },
@@ -343,6 +379,60 @@ async function assertCanChange(a: Actor, booking: BookingView, now: Date, verb: 
   return { staff };
 }
 
+/**
+ * Settles the money on a cancelled booking, according to the club's policy.
+ *
+ * Three outcomes, and the receipt explains which one happened:
+ *
+ * - Cancelled in good time, or nothing was paid: the invoice is voided and nothing changes hands.
+ * - Cancelled late: a fee line is added, so the invoice shows what was kept and why, and the rest goes
+ *   back. A club that keeps money without a line explaining it gets asked about it at the desk.
+ * - Cancelled inside the no-refund window: the whole amount is kept, again as a line on the document.
+ *
+ * Staff cancelling on a player's behalf never charge a fee: the club changed its mind, not the player.
+ * Failures are swallowed deliberately — a refund that cannot be reached must not leave a booking the
+ * player thinks is cancelled still sitting on a court.
+ */
+async function settleCancelledBooking(
+  actor: Actor,
+  booking: BookingView,
+  opts: { now: Date; staff: boolean; noShow: boolean; reason: string | null },
+): Promise<{ feeCents: number; refundedCents: number }> {
+  const invoice = await db.invoice.findFirst({ where: { bookingId: booking.id, voidedAt: null }, select: { id: true, totalCents: true, paidCents: true, refundedCents: true } });
+  if (!invoice) return { feeCents: 0, refundedCents: 0 };
+
+  const paid = Math.max(0, invoice.paidCents - invoice.refundedCents);
+  const { voidInvoice } = await import("./invoices");
+  if (paid === 0) {
+    await voidInvoice(actor, invoice.id, opts.noShow ? "No-show" : "Booking cancelled", { now: opts.now }).catch(() => undefined);
+    return { feeCents: 0, refundedCents: 0 };
+  }
+
+  // A club cancelling its own booking does not charge the player for it.
+  const byClub = opts.staff && booking.playerId !== actor.id;
+  const policy = await getPaymentPolicy(booking.locationId);
+  const cutoffHours = booking.location.bookingPolicy?.cancellationCutoffHours ?? 12;
+  const hoursBeforeStart = (booking.startsAt.getTime() - opts.now.getTime()) / 3_600_000;
+  const charge = byClub
+    ? { chargeCents: 0, refundCents: paid, reason: null }
+    : cancellationCharge({ policy, totalCents: paid, hoursBeforeStart, cancellationCutoffHours: cutoffHours, noShow: opts.noShow });
+
+  try {
+    const { refundWithFee } = await import("./refunds");
+    await refundWithFee(actor, invoice.id, {
+      feeCents: charge.chargeCents,
+      feeDescription: charge.reason ?? (opts.noShow ? "No-show fee" : "Cancellation fee"),
+      reason: opts.reason ?? (opts.noShow ? "No-show" : "Booking cancelled"),
+      now: opts.now,
+      key: `booking-cancel:${booking.id}`,
+    });
+  } catch {
+    // Left for the finance screen to pick up: the booking is cancelled either way.
+    return { feeCents: charge.chargeCents, refundedCents: 0 };
+  }
+  return { feeCents: charge.chargeCents, refundedCents: charge.refundCents };
+}
+
 export async function cancelBooking(actor: Actor | null, bookingId: string, input: unknown = {}, opts: { now?: Date } = {}): Promise<BookingView> {
   const a = await requireActor(actor);
   const now = opts.now ?? new Date();
@@ -351,13 +441,15 @@ export async function cancelBooking(actor: Actor | null, bookingId: string, inpu
   const booking = await loadBooking(bookingId);
   const { staff } = await assertCanChange(a, booking, now, "cancel");
 
+  const settlement = await settleCancelledBooking(a, booking, { now, staff, noShow: false, reason: parsed.data.reason ?? null });
+
   let game = null as GameCascade | null;
   const updated = await db.$transaction(async (tx) => {
     await tx.booking.update({ where: { id: bookingId }, data: { status: "CANCELLED", cancelledAt: now, cancelledById: a.id, cancellationReason: parsed.data.reason } });
-    await tx.payment.updateMany({ where: { bookingId, status: "PAID" }, data: { status: "REFUNDED", refundedAt: now } });
+    // Anything still owed is cancelled; what was paid has already been dealt with by the policy above.
     await tx.payment.updateMany({ where: { bookingId, status: "PENDING" }, data: { status: "CANCELLED" } });
     game = await cancelGameForBooking(tx, bookingId, a.id, now);
-    await audit({ actorId: a.id, action: "booking.cancelled", entityType: "Booking", entityId: bookingId, locationId: booking.locationId, metadata: { byStaff: staff && booking.playerId !== a.id, reason: parsed.data.reason } }, tx);
+    await audit({ actorId: a.id, action: "booking.cancelled", entityType: "Booking", entityId: bookingId, locationId: booking.locationId, metadata: { byStaff: staff && booking.playerId !== a.id, reason: parsed.data.reason, feeCents: settlement.feeCents, refundedCents: settlement.refundedCents } }, tx);
     return tx.booking.findUniqueOrThrow({ where: { id: bookingId }, select: bookingSelect });
   });
   if (booking.playerId && booking.playerId !== a.id) {
@@ -390,7 +482,7 @@ export async function rescheduleBooking(actor: Actor | null, bookingId: string, 
   const newCourt = await db.court.findUnique({ where: { id: parsed.data.courtId }, select: { locationId: true } });
   if (!newCourt) throw notFound("Court");
   if (newCourt.locationId !== old.locationId) throw validation("Rescheduling must stay within the same location.");
-  const slot = await validateSlot(parsed.data, { now, staff, excludeBookingId: old.id });
+  const slot = await validateSlot(parsed.data, { now, staff, excludeBookingId: old.id, playerId: old.playerId });
   let movedGame = null as GameCascade | null;
 
   try {
@@ -428,6 +520,25 @@ export async function rescheduleBooking(actor: Actor | null, bookingId: string, 
         });
         if (paid) await tx.payment.update({ where: { id: paid.id }, data: { bookingId: b.id } });
         await tx.payment.updateMany({ where: { bookingId: old.id, status: "PENDING" }, data: { status: "CANCELLED" } });
+
+        const invoice = await tx.invoice.findFirst({ where: { bookingId: old.id, voidedAt: null }, select: { id: true } });
+        if (invoice) {
+          await tx.invoice.update({ where: { id: invoice.id }, data: { bookingId: b.id } });
+          await tx.payment.updateMany({ where: { invoiceId: invoice.id }, data: { bookingId: b.id } });
+          await tx.invoiceLine.deleteMany({ where: { invoiceId: invoice.id, kind: "COURT" } });
+          await tx.invoiceLine.create({
+            data: {
+              invoiceId: invoice.id,
+              kind: "COURT",
+              description: `${slot.court.name} \u00b7 ${slot.location.name} \u00b7 ${formatInZone(slot.startsAt, slot.location.timezone)} \u00b7 ${parsed.data.durationMinutes} min`,
+              quantity: 1,
+              unitCents: slot.quote.totalCents,
+              amountCents: slot.quote.totalCents,
+              sortOrder: 0,
+            },
+          });
+          await recalculateInvoice(tx, invoice.id, now);
+        }
         movedGame = await moveGameToBooking(tx, old.id, { id: b.id, courtId: b.courtId, startsAt: b.startsAt, endsAt: b.endsAt }, a.id);
         await audit({ actorId: a.id, action: "booking.rescheduled", entityType: "Booking", entityId: b.id, locationId: old.locationId, metadata: { from: old.id, fromStartsAt: old.startsAt, toStartsAt: slot.startsAt, courtId: parsed.data.courtId } }, tx);
         return tx.booking.findUniqueOrThrow({ where: { id: b.id }, select: bookingSelect });
@@ -471,19 +582,46 @@ export async function setBookingStatus(actor: Actor | null, bookingId: string, s
   });
 }
 
-/** Records payment taken at the venue. Real providers will write Payment rows through webhooks later. */
+/**
+ * Records money taken at the desk for a booking.
+ *
+ * Kept as a booking-shaped entry point because that is where a receptionist is standing, but the money
+ * itself goes through the invoice: one path, one idempotency key, one audit entry, whatever is being
+ * paid for. A booking raised before invoices existed has none, so one is raised now rather than letting
+ * the desk fail on old data.
+ */
 export async function recordPayment(actor: Actor | null, bookingId: string, input: unknown, opts: { now?: Date } = {}): Promise<BookingView> {
   const booking = await loadBooking(bookingId);
-  const a = await requirePermission(actor, "payment.manage", { locationId: booking.locationId });
+  await requirePermission(actor, "payment.manage", { locationId: booking.locationId });
   const parsed = recordPaymentSchema.safeParse(input);
   if (!parsed.success) throw validation("Check the highlighted fields.", fieldErrors(parsed.error));
   if (booking.status === "CANCELLED") throw validation("Cannot take payment for a cancelled booking.");
-  const pending = booking.payments.find((p) => p.status === "PENDING");
   const now = opts.now ?? new Date();
+
+  const invoiceId = await ensureBookingInvoice(booking, actor?.id ?? null, now);
+  const { takePayment } = await import("./payments");
+  await takePayment(actor, invoiceId, { method: parsed.data.method, waive: parsed.data.status === "WAIVED" }, { now });
+  return loadBooking(bookingId);
+}
+
+/** Raises the invoice a booking should already have. Only old bookings reach this. */
+async function ensureBookingInvoice(booking: BookingView, actorId: string | null, now: Date): Promise<string> {
+  const existing = await db.invoice.findFirst({ where: { bookingId: booking.id, voidedAt: null }, select: { id: true } });
+  if (existing) return existing.id;
   return db.$transaction(async (tx) => {
-    if (pending) await tx.payment.update({ where: { id: pending.id }, data: { status: parsed.data.status, method: parsed.data.method, paidAt: now } });
-    else await tx.payment.create({ data: { bookingId, amountCents: booking.priceCents, status: parsed.data.status, method: parsed.data.method, paidAt: now } });
-    await audit({ actorId: a.id, action: "payment.recorded", entityType: "Booking", entityId: bookingId, locationId: booking.locationId, metadata: parsed.data }, tx);
-    return tx.booking.findUniqueOrThrow({ where: { id: bookingId }, select: bookingSelect });
+    const created = await createInvoice(
+      tx,
+      {
+        playerId: booking.playerId,
+        guestName: booking.guestName,
+        guestPhone: booking.guestPhone,
+        locationId: booking.locationId,
+        bookingId: booking.id,
+        createdById: actorId,
+        lines: [{ kind: "COURT", description: `${booking.court.name} \u00b7 ${booking.location.name} \u00b7 ${formatInZone(booking.startsAt, booking.location.timezone)} \u00b7 ${booking.durationMinutes} min`, unitCents: booking.priceCents }],
+      },
+      now,
+    );
+    return created.id;
   });
 }
