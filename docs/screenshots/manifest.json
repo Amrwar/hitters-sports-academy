@@ -222,6 +222,24 @@
     "viewport": "phone"
   },
   {
+    "name": "player-billing",
+    "caption": "Billing: what is still owed, the academy credit balance, and every receipt.",
+    "file": "docs/screenshots/player-billing.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-receipt",
+    "caption": "One invoice: the lines it was built from, what has been paid, and paying from account credit.",
+    "file": "docs/screenshots/player-receipt.png",
+    "viewport": "phone"
+  },
+  {
+    "name": "player-membership",
+    "caption": "Membership: the plans, what each includes, and the term a member currently holds.",
+    "file": "docs/screenshots/player-membership.png",
+    "viewport": "phone"
+  },
+  {
     "name": "player-messages",
     "caption": "Messages: one conversation per game and per program, newest activity first.",
     "file": "docs/screenshots/player-messages.png",
@@ -363,6 +381,36 @@
     "name": "admin-moderation",
     "caption": "Moderation queue: a reported message with the reason, the original text, and remove, action, dismiss or lock the conversation.",
     "file": "docs/screenshots/admin-moderation.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-finance",
+    "caption": "Finance: invoiced against collected week by week, how people paid, what the money was for, what is owed oldest first, refunds and a per-club table.",
+    "file": "docs/screenshots/admin-finance.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-invoices",
+    "caption": "Every invoice, filterable by owed, paid, refunded or void, searchable by number or member.",
+    "file": "docs/screenshots/admin-invoices.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-invoice-detail",
+    "caption": "One invoice: its lines, the movement history, and taking payment, refunding, voiding or applying a code.",
+    "file": "docs/screenshots/admin-invoice-detail.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-memberships",
+    "caption": "Membership plans with what each includes and how many hold it, and every member with their term and what they still owe.",
+    "file": "docs/screenshots/admin-memberships.png",
+    "viewport": "desktop"
+  },
+  {
+    "name": "admin-coupons",
+    "caption": "Discount codes with every limit the service enforces: value, cap, minimum spend, scope, window, total uses and uses per player.",
+    "file": "docs/screenshots/admin-coupons.png",
     "viewport": "desktop"
   },
   {

@@ -197,6 +197,15 @@ try {
   }
   await go(page, "/app/packages");
   await shot(page, "player-packages", "Packages: credits left, expiry, catalogue, lesson history.", { viewport: "phone", fullPage: true });
+  await go(page, "/app/billing");
+  await shot(page, "player-billing", "Billing: what is still owed, the academy credit balance, and every receipt.", { viewport: "phone", fullPage: true });
+  const receiptHref = await page.$eval('a[href^="/app/billing/HT-"]', (a) => a.getAttribute("href")).catch(() => null);
+  if (receiptHref) {
+    await go(page, receiptHref);
+    await shot(page, "player-receipt", "One invoice: the lines it was built from, what has been paid, and paying from account credit.", { viewport: "phone", fullPage: true });
+  }
+  await go(page, "/app/membership");
+  await shot(page, "player-membership", "Membership: the plans, what each includes, and the term a member currently holds.", { viewport: "phone", fullPage: true });
   await logout(page);
   await page.close();
 
@@ -274,6 +283,21 @@ try {
   await shot(page, "admin-notification-delivery", "Delivery health per channel: in-app sent immediately, email, push and SMS queued until a provider is registered.", { viewport: "desktop" });
   await go(page, "/admin/moderation");
   await shot(page, "admin-moderation", "Moderation queue: a reported message with the reason, the original text, and remove, action, dismiss or lock the conversation.", { viewport: "desktop", fullPage: true });
+
+  /* ------------------------------------------------------------------ Money */
+  await go(page, "/admin/finance");
+  await shot(page, "admin-finance", "Finance: invoiced against collected week by week, how people paid, what the money was for, what is owed oldest first, refunds and a per-club table.", { viewport: "desktop", fullPage: true });
+  await go(page, "/admin/finance/invoices");
+  await shot(page, "admin-invoices", "Every invoice, filterable by owed, paid, refunded or void, searchable by number or member.", { viewport: "desktop" });
+  const invoiceHref = await page.$eval('a[href^="/admin/finance/invoices/HT-"]', (a) => a.getAttribute("href")).catch(() => null);
+  if (invoiceHref) {
+    await go(page, invoiceHref);
+    await shot(page, "admin-invoice-detail", "One invoice: its lines, the movement history, and taking payment, refunding, voiding or applying a code.", { viewport: "desktop", fullPage: true });
+  }
+  await go(page, "/admin/memberships");
+  await shot(page, "admin-memberships", "Membership plans with what each includes and how many hold it, and every member with their term and what they still owe.", { viewport: "desktop", fullPage: true });
+  await go(page, "/admin/coupons");
+  await shot(page, "admin-coupons", "Discount codes with every limit the service enforces: value, cap, minimum spend, scope, window, total uses and uses per player.", { viewport: "desktop" });
   await page.close();
 
   /* ------------------------------------------------------------------ Trainer workspace (desktop, fresh session) */
