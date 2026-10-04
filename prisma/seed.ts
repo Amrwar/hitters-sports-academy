@@ -71,7 +71,7 @@ async function main() {
   const perms = await seedRolePermissions(db);
   console.log(`permissions: ${perms.total} grants (${perms.removed} stale removed)`);
   const templates = await seedNotificationTemplates(db);
-  console.log(`notification templates: ${templates.total} types (${templates.created} added)`);
+  console.log(`notification templates: ${templates.total} types (${templates.created} added, ${templates.refreshed} refreshed)`);
   await db.levelDefinition.createMany({ data: DEFAULT_LEVELS, skipDuplicates: true });
 
   const locationIds = new Map<string, string>();
@@ -344,6 +344,11 @@ async function main() {
   await ensureNotification(amrId, "academy.announcement", { type: "academy.announcement", url: "/app/notifications", dedupeKey: null, data: { title: "New Cairo courts resurfaced", body: "Courts 1 to 4 have fresh turf from Monday. Expect a slightly faster bounce." } });
   await ensureNotification(amrId, "booking.reminder", { type: "booking.reminder", url: `/app/bookings/${bAmr.id}`, dedupeKey: `booking.reminder:${bAmr.id}`, data: { code: "HT-SEED02", club: nc, court: "Court 3", when: whenAmr } });
   await ensureNotification(amrId, "match.suggested", { type: "match.suggested", url: "/app/play/GM-SEED03", groupKey: "GM-SEED03", data: { when: "Thu 18:00", club: LOCATIONS.find((l) => l.slug === "sheikh-zayed")!.name, reasons: "Exact level match · Inside your preferred times", code: "GM-SEED03" } });
+  await ensureNotification(amrId, "assessment.completed", {
+    type: "assessment.completed",
+    url: "/app/profile?tab=assessment",
+    data: { level: "B", label: "Intermediate+", kind: "Assessed", club: nc, assessor: "Coach Ahmed", previousSuffix: "" },
+  });
   console.log("notifications: done");
 
   // Twelve weeks of completed bookings, so the dashboard and analytics have a real business to report on.

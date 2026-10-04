@@ -17,7 +17,7 @@ async function main() {
   console.log(`[sync] permissions: ${perms.total} grants (${perms.removed} stale removed)`);
 
   const templates = await seedNotificationTemplates(db);
-  console.log(`[sync] notification templates: ${templates.total} types (${templates.created} added)`);
+  console.log(`[sync] notification templates: ${templates.total} types (${templates.created} added, ${templates.refreshed} refreshed)`);
 
   const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
   const password = process.env.BOOTSTRAP_ADMIN_PASSWORD;

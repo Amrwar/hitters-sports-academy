@@ -44,8 +44,9 @@ export function invalidateTemplateCache() {
 }
 
 /** Writes any catalogue type missing from the database. Safe to run on every deploy; never overwrites edits. */
-export async function seedNotificationTemplates(client: typeof db = db): Promise<{ created: number; total: number }> {
-  const existing = new Set((await client.notificationTemplate.findMany({ select: { type: true } })).map((t) => t.type));
+export async function seedNotificationTemplates(client: typeof db = db): Promise<{ created: number; refreshed: number; total: number }> {
+  const rows = await client.notificationTemplate.findMany({ select: { type: true, title: true, body: true, updatedById: true } });
+  const existing = new Map(rows.map((t) => [t.type, t]));
   const missing = NOTIFICATION_TYPES.filter((t) => !existing.has(t));
   if (missing.length) {
     await client.notificationTemplate.createMany({
@@ -56,8 +57,22 @@ export async function seedNotificationTemplates(client: typeof db = db): Promise
       skipDuplicates: true,
     });
   }
+
+  // A template nobody has edited should follow the product's own wording as that wording improves. Once an
+  // administrator saves one, updatedById is set and it is never touched again.
+  const stale = NOTIFICATION_TYPES.filter((type) => {
+    const row = existing.get(type);
+    if (!row || row.updatedById) return false;
+    const def = NOTIFICATION_CATALOG[type];
+    return row.title !== def.title || row.body !== def.body;
+  });
+  for (const type of stale) {
+    const def = NOTIFICATION_CATALOG[type];
+    await client.notificationTemplate.update({ where: { type }, data: { title: def.title, body: def.body, category: def.category } });
+  }
+
   invalidateTemplateCache();
-  return { created: missing.length, total: NOTIFICATION_TYPES.length };
+  return { created: missing.length, refreshed: stale.length, total: NOTIFICATION_TYPES.length };
 }
 
 export async function listTemplates(actor: Actor | null) {
