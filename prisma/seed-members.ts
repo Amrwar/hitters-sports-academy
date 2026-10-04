@@ -70,8 +70,9 @@ export async function seedMembers(db: PrismaClient, password: string): Promise<{
     used.add(email);
 
     // Joining dates spread across the history and weighted towards recent weeks, so "new members this
-    // period" is a figure that moves rather than a flat line.
-    const weeksAgo = Math.floor(WEEKS * random() * random());
+    // period" is a figure that grows rather than flat noise. The square root puts the density on the recent
+    // end while still reaching back the full thirty weeks, which multiplying two uniforms does not.
+    const weeksAgo = Math.floor(WEEKS * (1 - Math.sqrt(1 - random())));
     const joined = new Date(now - weeksAgo * 7 * 86_400_000 - Math.floor(random() * 86_400_000));
     const level = LEVELS[Math.floor(random() * LEVELS.length)]!;
 

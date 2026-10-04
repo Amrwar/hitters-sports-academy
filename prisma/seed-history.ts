@@ -38,6 +38,20 @@ function rng(seed: number) {
   };
 }
 
+/** What a private hour was spent on, so the coach's calendar is not a column of dashes. */
+const LESSON_FOCUS = [
+  "Bandeja depth and net position",
+  "Serve and first volley",
+  "Back-glass recovery",
+  "Vibora and the switch",
+  "Lob defence under pressure",
+  "Point construction in doubles",
+  "Smash selection: por tres or bandeja",
+  "Footwork and court coverage",
+  "Returning a heavy serve",
+  "Match play with feedback",
+];
+
 /** How likely an hour is to be booked, by hour of the day and whether it is a weekend. */
 function demand(hour: number, weekend: boolean): number {
   if (hour < 9) return weekend ? 0.3 : 0.08;
@@ -275,14 +289,17 @@ async function seedPastLessons(db: PrismaClient, random: () => number): Promise<
   for (const trainer of trainers) {
     const locationId = trainer.locations[0]?.locationId;
     if (!locationId) continue;
-    for (let dayBack = WEEKS * 7; dayBack >= 2; dayBack -= 1) {
-      if (random() > 0.45) continue;
+    // The same window as the court book: the past, plus the days ahead, so a coach opening their calendar
+    // sees a week of work rather than one lesson.
+    for (let dayBack = WEEKS * 7; dayBack >= -FORWARD_DAYS; dayBack -= 1) {
+      const ahead = dayBack <= 0;
+      if (random() > (ahead ? 0.5 : 0.45)) continue;
       const day = new Date(now);
       day.setUTCDate(day.getUTCDate() - dayBack);
       // One lesson per coach per day, at a believable coaching hour, so no two of a coach's lessons overlap.
       const hour = 10 + Math.floor(random() * 9);
       const startsAt = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), hour - 2, 0, 0, 0));
-      if (startsAt >= now) continue;
+      const upcoming = startsAt > now;
       const durationMinutes = random() < 0.7 ? 60 : 90;
       const priceCents = Math.round(((trainer.hourlyRateCents || 60000) * durationMinutes) / 60);
       made++;
@@ -296,11 +313,18 @@ async function seedPastLessons(db: PrismaClient, random: () => number): Promise<
             startsAt,
             endsAt: new Date(startsAt.getTime() + durationMinutes * 60_000),
             durationMinutes,
-            status: "COMPLETED",
+            // A lesson a coach has yet to give is confirmed, not completed, and a few are still awaiting the
+            // coach's acceptance, so the requests queue has something in it.
+            status: upcoming ? (random() < 0.18 ? "REQUESTED" : "CONFIRMED") : "COMPLETED",
+            focus: LESSON_FOCUS[Math.floor(random() * LESSON_FOCUS.length)],
             priceCents,
             createdById: trainer.userId,
-            createdAt: new Date(startsAt.getTime() - 4 * 86_400_000),
-            payments: { create: { amountCents: priceCents, status: "PAID", method: random() < 0.5 ? "CASH" : "CARD", paidAt: startsAt } },
+            createdAt: new Date(Math.min(now.getTime() - 3_600_000, startsAt.getTime() - 4 * 86_400_000)),
+            payments: {
+              create: upcoming
+                ? { amountCents: priceCents, status: "PENDING", method: "NONE" }
+                : { amountCents: priceCents, status: "PAID", method: random() < 0.5 ? "CASH" : "CARD", paidAt: startsAt },
+            },
           },
         })
         .catch(() => undefined); // a rare overlap with a seeded demo lesson is not worth failing the seed over

@@ -172,7 +172,7 @@ export function CoachingView({ viewerId, levelLabels, trainer, clubs, selectedCl
           <StatTile label="Upcoming lessons" value={trainer.upcoming.length} />
           <StatTile label="Requests" value={trainer.requests.length} tone={trainer.requests.length ? "brand" : "default"} />
           <StatTile label="Students" value={trainer.students.length} />
-          <StatTile label="Programs" value={trainer.programs.filter((p) => ["OPEN", "FULL", "IN_PROGRESS"].includes(p.status)).length} />
+          <StatTile label="Live programs" value={trainer.programs.filter((p) => LIVE_PROGRAM.includes(p.status)).length} />
         </div>
       )}
       {!trainer && clubs.length === 0 && <EmptyState icon={<GraduationCap />} title="Nothing to coach yet" description="This page shows a trainer's calendar or the lessons at clubs you manage." />}
@@ -467,6 +467,9 @@ function AvailabilityEditor({ trainer, clubs, onSaved }: { trainer: TrainerView;
   );
 }
 
+/** Intakes a coach still has work to do on, as opposed to ones that have finished. */
+const LIVE_PROGRAM = ["OPEN", "FULL", "IN_PROGRESS"] as string[];
+
 /* ------------------------------------------------------------------ Trainer's programs with attendance */
 
 function TrainerPrograms({ programs, levelLabels }: { programs: ProgramView[]; levelLabels: Record<string, string> }) {
@@ -498,10 +501,10 @@ function TrainerPrograms({ programs, levelLabels }: { programs: ProgramView[]; l
     } else toast({ tone: "danger", title: "Nothing was saved", description: res.message });
   }
 
-  return (
-    <div className="mt-5 space-y-4">
-      {programs.length === 0 && <EmptyState compact icon={<GraduationCap />} title="No programs assigned" description="Managers assign programs to you from Programs." />}
-      {programs.map((p) => (
+  const live = programs.filter((p) => LIVE_PROGRAM.includes(p.status));
+  const finished = programs.filter((p) => !LIVE_PROGRAM.includes(p.status));
+
+  const card = (p: ProgramView) => (
         <Card key={p.id}>
           <CardHeader
             title={
@@ -542,7 +545,21 @@ function TrainerPrograms({ programs, levelLabels }: { programs: ProgramView[]; l
             })}
           </ul>
         </Card>
-      ))}
+  );
+
+  return (
+    <div className="mt-5 space-y-4">
+      {programs.length === 0 && <EmptyState compact icon={<GraduationCap />} title="No programs assigned" description="Managers assign programs to you from Programs." />}
+      {live.map(card)}
+      {finished.length > 0 && (
+        <details className="group">
+          <summary className="cursor-pointer list-none rounded-md border border-line/10 bg-surface-1 px-4 py-3 text-body-sm font-semibold text-fg-muted hover:text-fg">
+            {count(finished.length, "finished intake")} · <span className="text-blue-400 group-open:hidden">show</span>
+            <span className="hidden text-blue-400 group-open:inline">hide</span>
+          </summary>
+          <div className="mt-4 space-y-4">{finished.map(card)}</div>
+        </details>
+      )}
       <Modal open={!!open} onClose={() => setOpen(null)} title="Attendance" description={open ? `${open.program.name} · session ${open.program.sessions.find((s) => s.id === open.sessionId)?.index}` : ""}>
         <div className="space-y-2 pb-2">
           {roster.map((e) => (

@@ -12,6 +12,8 @@
 import type { PrismaClient, PlayerLevel, Prisma } from "@prisma/client";
 
 const CODE_PREFIX = "PX-";
+/** How many players the one full intake keeps queued. */
+const WAITLIST_TARGET = 2;
 
 type Template = {
   name: string;
@@ -144,17 +146,40 @@ export async function seedAcademyHistory(db: PrismaClient): Promise<{ programs: 
     }
   }
 
-  // Bring the open intakes close to capacity. Two places are deliberately left so the enrolment flow, the
-  // "places left" badge and the waitlist all have something to show.
+  enrollments += await fillOpenIntakes(db, random);
+
+  return { programs, enrollments, skipped: false };
+}
+
+
+/**
+ * Fills the intakes that are open for enrolment.
+ *
+ * Separate from the history above because it is naturally idempotent — an intake already at its target
+ * gains nobody — and because a demo database often wants the rosters refreshed without regenerating
+ * thirty weeks of finished ones.
+ */
+export async function fillOpenIntakes(db: PrismaClient, random: () => number): Promise<number> {
+  const players = await db.playerProfile.findMany({ select: { userId: true, level: true } });
+  if (players.length < 8) return 0;
+  const byLevel = (levels: PlayerLevel[]) => (levels.length === 0 ? players : players.filter((p) => p.level && levels.includes(p.level)));
+  const now = new Date();
+  let enrollments = 0;
+
+  // Bring the open intakes close to capacity. Two places are deliberately left on each so the enrolment
+  // flow and the "places left" badge have something to show, except the first, which is filled and given a
+  // waitlist: a waitlist on an intake with free places would be a contradiction on screen.
   const open = await db.program.findMany({
     where: { status: "OPEN" },
-    select: { id: true, capacity: true, levels: true, allowWaitlist: true, startsOn: true, priceCents: true, enrollments: { select: { playerId: true } } },
+    select: { id: true, capacity: true, levels: true, allowWaitlist: true, startsOn: true, priceCents: true, enrollments: { select: { playerId: true, status: true } } },
+    orderBy: { code: "asc" }, // which intake gets filled and waitlisted must not depend on row order
   });
-  for (const p of open) {
+  for (const [index, p] of open.entries()) {
     // A player can only hold one enrolment per intake, so anyone the base seed already placed is excluded.
     const taken = new Set(p.enrollments.map((e) => e.playerId));
     const pool = byLevel(p.levels).filter((x) => !taken.has(x.userId));
-    const want = Math.max(0, p.capacity - taken.size - 2);
+    const fillUp = index === 0;
+    const want = Math.max(0, p.capacity - taken.size - (fillUp ? 0 : 2));
     const picked = new Set<string>();
     for (let guard = 0; picked.size < want && guard < want * 20 && pool.length; guard++) picked.add(pool[Math.floor(random() * pool.length)]!.userId);
     for (const playerId of picked) {
@@ -170,13 +195,17 @@ export async function seedAcademyHistory(db: PrismaClient): Promise<{ programs: 
       });
       enrollments++;
     }
-    // One waitlisted player per intake that takes a waitlist, so the position badge has a subject.
-    const free = pool.find((x) => !picked.has(x.userId));
-    if (p.allowWaitlist && free) {
-      await db.programEnrollment.create({ data: { programId: p.id, playerId: free.userId, status: "WAITLISTED", position: 1, createdById: free.userId } });
-      enrollments++;
+    // Two players queued on the one full intake, so the waitlist and its position badge have subjects.
+    // Counted against what is already there, because this function is expected to run more than once.
+    const queued = p.enrollments.filter((e) => e.status === "WAITLISTED").length;
+    if (fillUp && p.allowWaitlist && queued < WAITLIST_TARGET) {
+      const queue = pool.filter((x) => !picked.has(x.userId)).slice(0, WAITLIST_TARGET - queued);
+      for (const [i, x] of queue.entries()) {
+        await db.programEnrollment.create({ data: { programId: p.id, playerId: x.userId, status: "WAITLISTED", position: queued + i + 1, createdById: x.userId } });
+        enrollments++;
+      }
     }
   }
 
-  return { programs, enrollments, skipped: false };
+  return enrollments;
 }
