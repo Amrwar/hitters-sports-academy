@@ -46,7 +46,8 @@ export async function seedHistory(db: PrismaClient): Promise<{ created: number; 
       where: { status: "ACTIVE" },
       select: { id: true, timezone: true, courts: { where: { status: "ACTIVE" }, select: { id: true, availability: { select: { dayOfWeek: true, opensAt: true, closesAt: true, priceCents: true } } } } },
     }),
-    db.user.findMany({ where: { status: "ACTIVE", playerProfile: { isNot: null } }, select: { id: true } }),
+    // Members, not the admin account: a demo reads better when the bookings belong to people who play.
+    db.user.findMany({ where: { status: "ACTIVE", globalRole: null, playerProfile: { isNot: null } }, select: { id: true } }),
   ]);
   if (locations.length === 0 || players.length === 0) return { created: 0, skipped: true };
 
@@ -146,7 +147,7 @@ export async function seedHistory(db: PrismaClient): Promise<{ created: number; 
  */
 async function seedPastGames(db: PrismaClient, bookings: { id: string; playerId: string | null; startsAt: Date }[], random: () => number): Promise<void> {
   if (await db.gameSession.count({ where: { code: { startsWith: "GX-" } } })) return;
-  const players = await db.user.findMany({ where: { status: "ACTIVE", playerProfile: { isNot: null } }, select: { id: true } });
+  const players = await db.user.findMany({ where: { status: "ACTIVE", globalRole: null, playerProfile: { isNot: null } }, select: { id: true } });
   if (players.length < 4) return;
 
   // Spread across the whole history rather than its oldest slice, so every reporting window has games in it.
@@ -207,7 +208,7 @@ async function seedPastLessons(db: PrismaClient, random: () => number): Promise<
     where: { status: "ACTIVE" },
     select: { id: true, userId: true, hourlyRateCents: true, locations: { select: { locationId: true } } },
   });
-  const players = await db.user.findMany({ where: { status: "ACTIVE", playerProfile: { isNot: null } }, select: { id: true } });
+  const players = await db.user.findMany({ where: { status: "ACTIVE", globalRole: null, playerProfile: { isNot: null } }, select: { id: true } });
   if (trainers.length === 0 || players.length === 0) return;
 
   const now = new Date();

@@ -193,7 +193,7 @@ export function PurchaseCard({ purchase, className }: { purchase: PurchaseView; 
         <div className={cn("mt-2 flex flex-wrap gap-x-3 text-caption", purchase.status === "ACTIVE" ? "text-white/80" : "text-fg-muted")}>
           <span>{purchase.creditsUsed} used</span>
           <span>Expires {shortDate(purchase.expiresAt)}</span>
-          <span>{money(purchase.priceCents, purchase.currency)} · {purchase.payments[0]?.status === "PAID" ? "paid" : "pay at venue"}</span>
+          <span>{money(purchase.priceCents, purchase.currency)} · {purchase.payments[0]?.status === "PAID" ? "Paid" : "Pay at the venue"}</span>
         </div>
         {void pct}
       </div>

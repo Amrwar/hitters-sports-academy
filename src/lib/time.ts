@@ -133,3 +133,12 @@ export function longDate(dateISO: string): string {
 
 /** "11 Apr 2027", for expiry dates where the weekday adds nothing. */
 export const plainDate = (at: Date | string): string => new Date(at).toLocaleDateString(LOCALE, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+
+/**
+ * A timezone in words for a player: "Cairo time" rather than "Africa/Cairo". Staff screens keep the IANA id,
+ * which is exact and is what they configure.
+ */
+export function timezoneLabel(tz: string): string {
+  const city = tz.split("/").pop()?.replace(/_/g, " ");
+  return city ? `${city} time` : tz;
+}

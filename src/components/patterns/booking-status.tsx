@@ -36,7 +36,7 @@ const PAY_TONE: Record<PaymentStatus, "success" | "warning" | "danger" | "neutra
 
 export const PAY_LABEL: Record<PaymentStatus, string> = {
   PAID: "Paid",
-  PENDING: "Pay at venue",
+  PENDING: "Pay at the venue",
   WAIVED: "Waived",
   REFUNDED: "Refunded",
   CANCELLED: "No charge",

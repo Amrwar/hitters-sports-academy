@@ -136,7 +136,7 @@ const SAMPLE: Record<string, string> = {
   kind: "Assessed",
 };
 
-/** "game.request_waitlisted" reads as "Games and matchmaking: request waitlisted" for the card heading. */
+/** "game.request_waitlisted" reads as "Game: Request waitlisted" for the card heading. */
 function templateTitle(type: string): string {
   const [group, ...rest] = type.split(".");
   const action = rest.join(" ").replace(/_/g, " ");
@@ -155,8 +155,9 @@ function templateTitle(type: string): string {
     staff: "Staff",
     message: "Message",
   };
-  const label = `${groupName[group] ?? group} ${action}`.trim();
-  return label.charAt(0).toUpperCase() + label.slice(1);
+  const head = groupName[group] ?? group;
+  const tail = action.charAt(0).toUpperCase() + action.slice(1);
+  return tail ? `${head}: ${tail}` : head;
 }
 
 function TemplateCard({ template }: { template: TemplateDto }) {

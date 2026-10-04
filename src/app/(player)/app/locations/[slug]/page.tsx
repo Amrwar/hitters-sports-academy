@@ -7,7 +7,7 @@ import { Badge, StatusBadge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { CourtBackdrop } from "@/components/patterns/cards";
 import { COURT_TYPES, facilityLabel, PRICING_KINDS } from "@/lib/catalog";
-import { DAY_NAMES, DAY_SHORT, dayOfWeekISO, minutesToHHMM, todayISO } from "@/lib/time";
+import { DAY_NAMES, DAY_SHORT, dayOfWeekISO, minutesToHHMM, timezoneLabel, todayISO } from "@/lib/time";
 import { requireActorOrRedirect } from "@/lib/auth/cookies";
 import { isAppError } from "@/lib/errors";
 import type { OpeningHours } from "@/lib/validation/schemas";
@@ -96,7 +96,7 @@ export default async function LocationPage({ params }: { params: Promise<{ slug:
             <span className="ml-auto font-semibold tabular">{loc.priceFromCents != null ? `from EGP ${Math.round(loc.priceFromCents / 100)}/h` : "—"}</span>
           </li>
           <li className="flex items-center gap-3 py-2.5">
-            <Info size={16} className="text-blue-300" /> <span className="text-fg-muted">Timezone</span> <span className="ml-auto font-semibold">{loc.timezone}</span>
+            <Info size={16} className="text-blue-300" /> <span className="text-fg-muted">Local time</span> <span className="ml-auto font-semibold">{timezoneLabel(loc.timezone)}</span>
           </li>
         </ul>
       </Card>
